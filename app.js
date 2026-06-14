@@ -921,64 +921,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const token = replicateApiToken;
-        fetch('/api-replicate/v1/predictions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Token ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                version: "cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2", // CodeFormer version
-                input: {
-                    image: imgSrc,
-                    codeformer_fidelity: Math.min(1.0, Math.max(0.1, 1.0 - (denoiseVal / 100))),
-                    background_enhance: true,
-                    face_upsample: true,
-                    upscale: isDownload ? 4 : 2
-                }
+        ensureBase64AndCompress(imgSrc, (compressedImgSrc) => {
+            fetch('/api-replicate/v1/predictions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    version: "cc4956dd26fa5a7185d5660cc9100fab1b8070a1d1654a8bb5eb6d443b020bb2", // CodeFormer version
+                    input: {
+                        image: compressedImgSrc,
+                        codeformer_fidelity: Math.min(1.0, Math.max(0.1, 1.0 - (denoiseVal / 100))),
+                        background_enhance: true,
+                        face_upsample: true,
+                        upscale: isDownload ? 4 : 2
+                    }
+                })
             })
-        })
-        .then(async (res) => {
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(errText || "Unauthorized / Replicate API error");
-            }
-            return res.json();
-        })
-        .then((prediction) => {
-            const id = prediction.id;
-            
-            // Poll prediction status
-            const pollInterval = setInterval(() => {
-                fetch(`/api-replicate/v1/predictions/${id}`, {
-                    headers: {
-                        'Authorization': `Token ${token}`
-                    }
-                })
-                .then(r => r.json())
-                .then((pred) => {
-                    if (pred.status === 'succeeded') {
+            .then(async (res) => {
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || "Unauthorized / Replicate API error");
+                }
+                return res.json();
+            })
+            .then((prediction) => {
+                const id = prediction.id;
+                
+                // Poll prediction status
+                const pollInterval = setInterval(() => {
+                    fetch(`/api-replicate/v1/predictions/${id}`, {
+                        headers: {
+                            'Authorization': `Token ${token}`
+                        }
+                    })
+                    .then(r => r.json())
+                    .then((pred) => {
+                        if (pred.status === 'succeeded') {
+                            clearInterval(pollInterval);
+                            convertImgToDataURL(pred.output, (dataUrl) => {
+                                callback(dataUrl, true);
+                            });
+                        } else if (pred.status === 'failed' || pred.status === 'canceled') {
+                            clearInterval(pollInterval);
+                            console.warn("Replicate Prediction failed/canceled. Status:", pred.status);
+                            processImage(imgSrc, sharpenVal, denoiseVal, isDownload, (res) => callback(res, false));
+                        }
+                    })
+                    .catch((err) => {
                         clearInterval(pollInterval);
-                        convertImgToDataURL(pred.output, (dataUrl) => {
-                            callback(dataUrl, true);
-                        });
-                    } else if (pred.status === 'failed' || pred.status === 'canceled') {
-                        clearInterval(pollInterval);
-                        console.warn("Replicate Prediction failed/canceled. Status:", pred.status);
+                        console.error("Replicate Polling Network Error:", err);
                         processImage(imgSrc, sharpenVal, denoiseVal, isDownload, (res) => callback(res, false));
-                    }
-                })
-                .catch((err) => {
-                    clearInterval(pollInterval);
-                    console.error("Replicate Polling Network Error:", err);
-                    processImage(imgSrc, sharpenVal, denoiseVal, isDownload, (res) => callback(res, false));
-                });
-            }, 1500);
-        })
-        .catch((err) => {
-            console.error("Replicate Initiation Error:", err);
-            showToast("AI restoration failed. Falling back to local Canvas engine!");
-            processImage(imgSrc, sharpenVal, denoiseVal, isDownload, (res) => callback(res, false));
+                    });
+                }, 1500);
+            })
+            .catch((err) => {
+                console.error("Replicate Initiation Error:", err);
+                showToast("AI restoration failed. Falling back to local Canvas engine!");
+                processImage(imgSrc, sharpenVal, denoiseVal, isDownload, (res) => callback(res, false));
+            });
         });
     }
 
@@ -1000,8 +1002,44 @@ document.addEventListener('DOMContentLoaded', () => {
         xhr.responseType = 'blob';
         xhr.send();
     }
-
-
+    // Helper to resize and compress any uploaded or source image on the frontend before uploading (speeds up upload times from 10s -> 0.1s!)
+    function ensureBase64AndCompress(imgSrc, callback) {
+        const img = new Image();
+        if (imgSrc.startsWith('http') && !imgSrc.startsWith(window.location.origin)) {
+            img.crossOrigin = "anonymous";
+        }
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                const maxInputDim = 1200;
+                if (Math.max(w, h) > maxInputDim) {
+                    const scaleRatio = maxInputDim / Math.max(w, h);
+                    w = Math.round(w * scaleRatio);
+                    h = Math.round(h * scaleRatio);
+                }
+                w = w - (w % 4);
+                h = h - (h % 4);
+                
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                // Compress to JPEG with 0.9 quality
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.9);
+                callback(compressedBase64);
+            } catch (err) {
+                console.error("Error compressing image on frontend:", err);
+                callback(imgSrc); // fallback to original
+            }
+        };
+        img.onerror = (err) => {
+            console.error("Failed to load image for compression:", err);
+            callback(imgSrc);
+        };
+        img.src = imgSrc;
+    }
 
     // Modal GPU Serverless Integration
     function processImageModal(imgSrc, callback) {
@@ -1016,33 +1054,35 @@ document.addEventListener('DOMContentLoaded', () => {
             targetUrl += '/enhance';
         }
 
-        console.log("Fetching Modal upscaler at:", targetUrl);
-
-        fetch(targetUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ image: imgSrc })
-        })
-        .then(res => {
-            if (!res.ok) {
-                throw new Error("Modal GPU serverless enhancement failed.");
-            }
-            return res.json();
-        })
-        .then(data => {
-            if (data.output) {
-                callback(data.output, true);
-            } else {
-                throw new Error(data.error || "No output returned from Modal server.");
-            }
-        })
-        .catch(err => {
-            console.error("Modal GPU Error:", err);
-            showToast("Modal GPU backend unreachable. Check if your endpoint is active and URL is correct.");
-            // Fallback to local Canvas restoration
-            processImage(imgSrc, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), false, (res) => callback(res, false));
+        console.log("Compressing image on frontend before uploading to Modal...");
+        ensureBase64AndCompress(imgSrc, (compressedImgSrc) => {
+            console.log("Fetching Modal upscaler at:", targetUrl);
+            fetch(targetUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ image: compressedImgSrc })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("Modal GPU serverless enhancement failed.");
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.output) {
+                    callback(data.output, true);
+                } else {
+                    throw new Error(data.error || "No output returned from Modal server.");
+                }
+            })
+            .catch(err => {
+                console.error("Modal GPU Error:", err);
+                showToast("Modal GPU backend unreachable. Check if your endpoint is active and URL is correct.");
+                // Fallback to local Canvas restoration
+                processImage(imgSrc, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), false, (res) => callback(res, false));
+            });
         });
     }
 
