@@ -1,10 +1,7 @@
 import base64
 import os
-import numpy as np
-import cv2
 import modal
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+
 
 # 1. Define the Modal App
 app = modal.App("photo-enhancer")
@@ -44,6 +41,8 @@ def download_models():
 )
 @modal.asgi_app(label="enhance")
 def fastapi_app():
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
     web_app = FastAPI()
     
     web_app.add_middleware(
@@ -55,6 +54,8 @@ def fastapi_app():
     )
 
     def run_enhancement(request_data: dict):
+        import numpy as np
+        import cv2
         image_base64 = request_data.get("image")
         if not image_base64:
             return {"error": "Missing 'image' key in request JSON."}
