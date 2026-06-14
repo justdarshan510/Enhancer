@@ -12,14 +12,9 @@ app = modal.App("photo-enhancer")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("libgl1-mesa-glx", "libglib2.0-0")
-    .pip_install(
-        "numpy",
-        "opencv-python-headless",
-        "torch",
-        "torchvision",
-        "realesrgan",
-        "basicsr-fixed"
-    )
+    .pip_install("numpy", "torch", "torchvision")
+    .pip_install("opencv-python-headless")
+    .pip_install("basicsr-fixed", "realesrgan")
 )
 
 # Cache weights inside the container image so it starts instantly
