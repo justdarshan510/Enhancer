@@ -94,7 +94,6 @@
                             <select id="select-restoration-mode" style="display: none;">
                                 <option value="canvas">Canvas Math Pipeline (Instant)</option>
                                 <option value="replicate">Replicate Cloud AI (CodeFormer)</option>
-                                <option value="local">Local Python AI (Real-ESRGAN)</option>
                                 <option value="modal">Modal Serverless GPU (Real-ESRGAN)</option>
                             </select>
 
@@ -109,7 +108,6 @@
                                 <div class="apple-select-options">
                                     <div class="apple-select-option" data-value="canvas">Canvas Math Pipeline (Instant)</div>
                                     <div class="apple-select-option" data-value="replicate">Replicate Cloud AI (CodeFormer)</div>
-                                    <div class="apple-select-option" data-value="local">Local Python AI (Real-ESRGAN)</div>
                                     <div class="apple-select-option" data-value="modal">Modal Serverless GPU (Real-ESRGAN)</div>
                                 </div>
                             </div>
@@ -121,11 +119,6 @@
                             <input type="password" class="text-input" id="input-replicate-token" placeholder="Paste r8_... token here">
                             <div class="help-text">
                                 Get a token from <a href="https://replicate.com/account" target="_blank">replicate.com</a>. Stored locally.
-                            </div>
-                        </div>
-                        <div class="parameter-item" id="local-server-container" style="display: none; transition: all 0.3s ease;">
-                            <div class="help-text" style="color: var(--accent-color); font-weight: 500;">
-                                Run <code>python local_server.py</code> in a terminal to launch the local Real-ESRGAN backend.
                             </div>
                         </div>
 

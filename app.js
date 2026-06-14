@@ -105,13 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restoration Mode DOM Elements
     const selectRestorationMode = document.getElementById('select-restoration-mode');
     const aiTokenContainer = document.getElementById('ai-token-container');
-    const localServerContainer = document.getElementById('local-server-container');
     const inputReplicateToken = document.getElementById('input-replicate-token');
 
     // Initialize Restoration inputs from saved state
     selectRestorationMode.value = restorationMode;
     aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
-    localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
     inputReplicateToken.value = replicateApiToken;
 
     // Set up View Mode Toggle Listeners
@@ -140,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
         restorationMode = e.target.value;
         localStorage.setItem('restoration_mode', restorationMode);
         aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
-        localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
         
         // Keep custom apple select trigger text and active element in sync
         syncAppleSelect();
@@ -219,22 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             afterBadge.textContent = isAiSuccess ? "4K AI Enhanced" : "4K Canvas Enhanced";
                             afterBadge.style.background = isAiSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
                             afterBadge.style.color = isAiSuccess ? "#99ffbb" : "#ffcc99";
-                        }
-                    });
-                } else if (restorationMode === 'local') {
-                    if (afterBadge) {
-                        afterBadge.textContent = "Local AI Restoring...";
-                        afterBadge.style.background = "rgba(0, 180, 255, 0.45)";
-                        afterBadge.style.color = "#ffffff";
-                    }
-                    processImageLocal(uploadedImageBase64, (processedDataUrl, isLocalSuccess) => {
-                        processedImageBase64 = processedDataUrl;
-                        afterImg.src = processedDataUrl;
-                        sideAfterImg.src = processedDataUrl;
-                        if (afterBadge) {
-                            afterBadge.textContent = isLocalSuccess ? "4K Local AI Enhanced" : "4K Canvas Enhanced";
-                            afterBadge.style.background = isLocalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
-                            afterBadge.style.color = isLocalSuccess ? "#99ffbb" : "#ffcc99";
                         }
                     });
                 } else if (restorationMode === 'modal') {
@@ -1020,35 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
         xhr.send();
     }
 
-    // Local Real-ESRGAN Python Server Integration
-    function processImageLocal(imgSrc, callback) {
-        fetch('/api-local/api/enhance-local', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ image: imgSrc })
-        })
-        .then(res => {
-            if (!res.ok) {
-                throw new Error("Local backend enhancement failed.");
-            }
-            return res.json();
-        })
-        .then(data => {
-            if (data.output) {
-                callback(data.output, true);
-            } else {
-                throw new Error(data.error || "No output returned from local server.");
-            }
-        })
-        .catch(err => {
-            console.error("Local AI Error:", err);
-            showToast("Local AI backend unreachable. Check if python local_server.py is running!");
-            // Fallback to local Canvas restoration
-            processImage(imgSrc, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), false, (res) => callback(res, false));
-        });
-    }
+
 
     // Modal GPU Serverless Integration
     function processImageModal(imgSrc, callback) {
@@ -1304,33 +1257,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     afterBadge.style.color = isAiSuccess ? "#99ffbb" : "#ffcc99";
                 }
             });
-        } else if (restorationMode === 'local') {
-            if (afterBadge) {
-                afterBadge.textContent = "Local AI Restoring...";
-                afterBadge.style.background = "rgba(0, 180, 255, 0.45)";
-                afterBadge.style.color = "#ffffff";
-            }
-            processImageLocal(imageSrc, (processedDataUrl, isLocalSuccess) => {
-                processedImageBase64 = processedDataUrl;
-                beforeImg.src = imageSrc;
-                afterImg.src = processedDataUrl;
-                sideBeforeImg.src = imageSrc;
-                sideAfterImg.src = processedDataUrl;
-                
-                if (activeViewMode === 'slider') {
-                    sliderViewContainer.style.display = 'flex';
-                    sideBySideContainer.style.display = 'none';
-                } else {
-                    sideBySideContainer.style.display = 'flex';
-                    sliderViewContainer.style.display = 'none';
-                }
-                
-                if (afterBadge) {
-                    afterBadge.textContent = isLocalSuccess ? "4K Local AI Enhanced" : "4K Canvas Enhanced";
-                    afterBadge.style.background = isLocalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
-                    afterBadge.style.color = isLocalSuccess ? "#99ffbb" : "#ffcc99";
-                }
-            });
         } else if (restorationMode === 'modal') {
             if (afterBadge) {
                 afterBadge.textContent = "Modal AI Restoring...";
@@ -1518,16 +1444,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 { text: "Compiling output files and rendering 4K frame...", delay: 2500 },
                 { text: "Downloading 4K AI restored image...", delay: 3000 }
             ];
-        } else if (activeMode === 'local') {
+        } else if (activeMode === 'modal') {
             logLines = [
-                { text: "Initializing Local 4K AI Restoration...", delay: 100 },
-                { text: "Connecting to local backend at port 8002...", delay: 400 },
-                { text: "Uploading image to local server...", delay: 700 },
-                { text: "Invoking local Python Real-ESRGAN-master...", delay: 1000 },
-                { text: "Applying RealESRGAN_x4plus model weights...", delay: 1500 },
-                { text: "Performing 4x spatial upscaling...", delay: 2000 },
-                { text: "Local GPU/CPU processing completed...", delay: 2500 },
-                { text: "Downloading 4K locally upscaled output...", delay: 3000 }
+                { text: "Initializing Modal 4K AI Restoration...", delay: 100 },
+                { text: "Contacting serverless GPU cluster on Modal...", delay: 400 },
+                { text: "Uploading full-resolution source image...", delay: 700 },
+                { text: "Triggering Real-ESRGAN upscaler on T4 GPU...", delay: 1000 },
+                { text: "Enhancing facial features using GFPGAN...", delay: 1500 },
+                { text: "Restoring skin texture and high-frequency details...", delay: 2000 },
+                { text: "Encoding optimized JPEG payload (quality 90)...", delay: 2500 },
+                { text: "Downloading 4K AI restored image...", delay: 3000 }
             ];
         } else {
             logLines = [
@@ -1574,25 +1500,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.removeChild(link);
                     
                     showToast(isAiSuccess ? "Success! AI Face Restored image saved!" : "Success! Canvas Enhanced image saved!");
-                });
-            } else if (activeMode === 'local') {
-                processImageLocal(uploadedImageBase64, (processedDataUrl, isLocalSuccess) => {
-                    processingContainer.style.display = 'none';
-                    viewModeToggle.style.display = 'flex';
-                    if (activeViewMode === 'slider') {
-                        sliderViewContainer.style.display = 'flex';
-                    } else {
-                        sideBySideContainer.style.display = 'flex';
-                    }
-                    
-                    const link = document.createElement('a');
-                    link.href = processedDataUrl;
-                    link.download = isLocalSuccess ? "enhancer_local_fsrcnn.png" : "enhancer_canvas_enhanced.png";
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    showToast(isLocalSuccess ? "Success! Local Real-ESRGAN image saved!" : "Success! Canvas Enhanced image saved!");
                 });
             } else {
                 processImage(uploadedImageBase64, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), true, (processedDataUrl) => {
