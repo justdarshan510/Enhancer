@@ -75,6 +75,18 @@ def fastapi_app():
         if img is None:
             return {"error": "Could not decode input image."}
 
+        # Guard: if image is extremely large, resize it down to prevent GPU OOM and excessive response payload
+        h, w = img.shape[:2]
+        max_input_dim = 1200
+        if max(h, w) > max_input_dim:
+            print(f"Resize input image from {w}x{h} down to max dimension {max_input_dim}px to prevent OOM...")
+            scale_ratio = max_input_dim / max(h, w)
+            new_w = int(w * scale_ratio)
+            new_w = new_w - (new_w % 4) # ensure divisible by 4 for upscaler compatibility
+            new_h = int(h * scale_ratio)
+            new_h = new_h - (new_h % 4)
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
         try:
             # Monkey-patch torchvision.transforms.functional_tensor for basicsr compatibility
             import sys
@@ -107,7 +119,7 @@ def fastapi_app():
                 scale=4,
                 model_path=model_path,
                 model=model,
-                tile=0, # no tile unless out of memory
+                tile=512, # set tile size to 512 to prevent GPU memory OOM on large images
                 tile_pad=10,
                 pre_pad=0,
                 half=True, # use half-precision on GPU (faster, uses less memory)
