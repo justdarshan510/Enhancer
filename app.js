@@ -1069,7 +1069,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        fetch(modalUrl, {
+        let targetUrl = modalUrl.trim();
+        if (!targetUrl.endsWith('/enhance') && !targetUrl.endsWith('/')) {
+            targetUrl += '/enhance';
+        }
+
+        console.log("Fetching Modal upscaler at:", targetUrl);
+
+        fetch(targetUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
