@@ -10,10 +10,25 @@ app = modal.App("photo-enhancer")
 # We install torch, torchvision, and realesrgan for premium neural upscaling
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("libgl1-mesa-glx", "libglib2.0-0")
+    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "curl")
     .pip_install("numpy", "torch", "torchvision")
     .pip_install("opencv-python-headless", "fastapi[standard]")
     .pip_install("basicsr-fixed", "realesrgan")
+    .run_commands(
+        "mkdir -p /model_cache /root/gfpgan/weights",
+        "curl -L -o /model_cache/RealESRGAN_x4plus.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        "curl -L -o /model_cache/GFPGANv1.3.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth",
+        "curl -L -o /root/gfpgan/weights/detection_Resnet50_Final.pth https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+        "curl -L -o /root/gfpgan/weights/parsing_parsenet.pth https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth",
+        # Bake symlinks into multiple locations where facexlib checks for models so it never downloads them at runtime
+        "mkdir -p /usr/local/lib/python3.11/site-packages/facexlib/weights /root/facexlib/weights /facexlib/weights",
+        "ln -sf /root/gfpgan/weights/detection_Resnet50_Final.pth /usr/local/lib/python3.11/site-packages/facexlib/weights/detection_Resnet50_Final.pth",
+        "ln -sf /root/gfpgan/weights/parsing_parsenet.pth /usr/local/lib/python3.11/site-packages/facexlib/weights/parsing_parsenet.pth",
+        "ln -sf /root/gfpgan/weights/detection_Resnet50_Final.pth /root/facexlib/weights/detection_Resnet50_Final.pth",
+        "ln -sf /root/gfpgan/weights/parsing_parsenet.pth /root/facexlib/weights/parsing_parsenet.pth",
+        "ln -sf /root/gfpgan/weights/detection_Resnet50_Final.pth /facexlib/weights/detection_Resnet50_Final.pth",
+        "ln -sf /root/gfpgan/weights/parsing_parsenet.pth /facexlib/weights/parsing_parsenet.pth"
+    )
     .add_local_file("models/FSRCNN_x4.pb", "/models/FSRCNN_x4.pb")
 )
 
@@ -80,22 +95,39 @@ def fastapi_app():
         file_name=None
     )
 
-    # Initialize upscaler globally in the enclosing scope
+    # Initialize upscaler and face enhancer globally in the enclosing scope
     global_upscaler = None
+    global_face_enhancer = None
     try:
         global_upscaler = RealESRGANer(
             scale=4,
             model_path=model_path,
             model=model,
-            tile=512, # set tile size to 512 to prevent GPU memory OOM
+            tile=1024, # set tile size to 1024 to speed up GPU inference by avoiding tiles on small/medium images
             tile_pad=10,
             pre_pad=0,
             half=True, # use half-precision on GPU
             device=device
         )
-        print("Real-ESRGAN upscaler initialized successfully on GPU.")
+        
+        # Initialize GFPGAN for face enhancement
+        from gfpgan import GFPGANer
+        gfpgan_path = load_file_from_url(
+            url='https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth',
+            model_dir='/model_cache',
+            progress=True,
+            file_name=None
+        )
+        global_face_enhancer = GFPGANer(
+            model_path=gfpgan_path,
+            upscale=4,
+            arch='clean',
+            channel_multiplier=2,
+            bg_upsampler=global_upscaler
+        )
+        print("Real-ESRGAN upscaler and GFPGAN face enhancer initialized successfully on GPU.")
     except Exception as startup_err:
-        print("Real-ESRGAN GPU upscaler startup initialization failed:", startup_err)
+        print("Model initialization failed:", startup_err)
 
     def run_enhancement(request_data: dict):
         import numpy as np
@@ -130,17 +162,21 @@ def fastapi_app():
             if global_upscaler is None:
                 raise RuntimeError("Global Real-ESRGAN upscaler is not initialized.")
 
-            print("Enhancing image using serverless GPU Real-ESRGAN...")
-            # Run upscaling
-            enhanced, _ = global_upscaler.enhance(img, outscale=4)
+            if global_face_enhancer is not None:
+                print("Enhancing image using serverless GPU Real-ESRGAN + GFPGAN Face Restorer...")
+                _, _, enhanced = global_face_enhancer.enhance(img, has_aligned=False, only_center_face=False, paste_back=True)
+            else:
+                print("Enhancing image using serverless GPU Real-ESRGAN (no face restorer)...")
+                # Run upscaling
+                enhanced, _ = global_upscaler.enhance(img, outscale=4)
 
-            # Encode back to PNG
-            success, encoded_img = cv2.imencode('.png', enhanced)
+            # Encode back to JPEG (quality=90) to dramatically reduce payload size and transfer time
+            success, encoded_img = cv2.imencode('.jpg', enhanced, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             if not success:
                 return {"error": "Failed to encode processed image."}
 
             out_base64 = base64.b64encode(encoded_img).decode('utf-8')
-            data_url = f"data:image/png;base64,{out_base64}"
+            data_url = f"data:image/jpeg;base64,{out_base64}"
             
             return {"output": data_url}
 
@@ -164,9 +200,10 @@ def fastapi_app():
                 upscaled = sr.upsample(img)
                 refined = cv2.bilateralFilter(upscaled, d=5, sigmaColor=30, sigmaSpace=30)
                 
-                success, encoded_img = cv2.imencode('.png', refined)
+                # Encode CPU fallback as JPEG as well
+                success, encoded_img = cv2.imencode('.jpg', refined, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                 out_base64 = base64.b64encode(encoded_img).decode('utf-8')
-                data_url = f"data:image/png;base64,{out_base64}"
+                data_url = f"data:image/jpeg;base64,{out_base64}"
                 return {"output": data_url}
             except Exception as fallback_error:
                 return {"error": f"Enhancement failed: {str(fallback_error)}"}
