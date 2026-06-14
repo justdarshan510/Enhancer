@@ -8,3 +8,4 @@ dist/
 *.jpg
 *.png
 !assets/demo.png
+!public/assets/*.png
