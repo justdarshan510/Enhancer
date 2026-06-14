@@ -18,7 +18,7 @@ image = (
         "torch",
         "torchvision",
         "realesrgan",
-        "basicsr"
+        "basicsr-fixed"
     )
 )
 
@@ -27,7 +27,7 @@ image = (
 def download_models():
     # Pre-download the Real-ESRGAN model weights into the cache folder
     from realesrgan import RealESRGANer
-    from basictsr.archs.rrdbnet_arch import RRDBNet # placeholder or import wrapper if needed
+    from basicsr.archs.rrdbnet_arch import RRDBNet # placeholder or import wrapper if needed
     # REAL-ESRGANer downloads weights automatically on initialization
     # Run once to cache them
     try:
