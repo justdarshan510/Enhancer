@@ -58,6 +58,45 @@ def fastapi_app():
         allow_headers=["*"],
     )
 
+    # Monkey-patch torchvision.transforms.functional_tensor for basicsr compatibility
+    import sys
+    import torchvision.transforms.functional as F
+    sys.modules['torchvision.transforms.functional_tensor'] = F
+
+    import torch
+    from realesrgan import RealESRGANer
+    from basicsr.archs.rrdbnet_arch import RRDBNet
+    from basicsr.utils.download_util import load_file_from_url
+
+    # Initialize GPU device & model architecture
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+    
+    print("FastAPI container startup: Loading Real-ESRGAN weights globally...")
+    model_path = load_file_from_url(
+        url='https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
+        model_dir='/model_cache',
+        progress=True,
+        file_name=None
+    )
+
+    # Initialize upscaler globally in the enclosing scope
+    global_upscaler = None
+    try:
+        global_upscaler = RealESRGANer(
+            scale=4,
+            model_path=model_path,
+            model=model,
+            tile=512, # set tile size to 512 to prevent GPU memory OOM
+            tile_pad=10,
+            pre_pad=0,
+            half=True, # use half-precision on GPU
+            device=device
+        )
+        print("Real-ESRGAN upscaler initialized successfully on GPU.")
+    except Exception as startup_err:
+        print("Real-ESRGAN GPU upscaler startup initialization failed:", startup_err)
+
     def run_enhancement(request_data: dict):
         import numpy as np
         import cv2
@@ -88,47 +127,12 @@ def fastapi_app():
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
 
         try:
-            # Monkey-patch torchvision.transforms.functional_tensor for basicsr compatibility
-            import sys
-            import torchvision.transforms.functional as F
-            sys.modules['torchvision.transforms.functional_tensor'] = F
-
-            import torch
-            from realesrgan import RealESRGANer
-            from realesrgan.archs.srvgg_arch import SRVGGNetCompact
-
-            # RealESRGAN_x4plus is the standard model for general photos
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            
-            # Ensure model weights are loaded
-            from basicsr.utils.download_util import load_file_from_url
-            from basicsr.archs.rrdbnet_arch import RRDBNet
-            
-            model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-            
-            print("Loading Real-ESRGAN weights...")
-            model_path = load_file_from_url(
-                url='https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
-                model_dir='/model_cache',
-                progress=True,
-                file_name=None
-            )
-
-            # Initialize upscaler
-            upscaler = RealESRGANer(
-                scale=4,
-                model_path=model_path,
-                model=model,
-                tile=512, # set tile size to 512 to prevent GPU memory OOM on large images
-                tile_pad=10,
-                pre_pad=0,
-                half=True, # use half-precision on GPU (faster, uses less memory)
-                device=device
-            )
+            if global_upscaler is None:
+                raise RuntimeError("Global Real-ESRGAN upscaler is not initialized.")
 
             print("Enhancing image using serverless GPU Real-ESRGAN...")
             # Run upscaling
-            enhanced, _ = upscaler.enhance(img, outscale=4)
+            enhanced, _ = global_upscaler.enhance(img, outscale=4)
 
             # Encode back to PNG
             success, encoded_img = cv2.imencode('.png', enhanced)
