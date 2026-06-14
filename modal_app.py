@@ -10,7 +10,7 @@ app = modal.App("photo-enhancer")
 # 2. Define the container image with the required dependencies
 # We install torch, torchvision, and realesrgan for premium neural upscaling
 image = (
-    modal.Image.debian_slim()
+    modal.Image.debian_slim(python_version="3.11")
     .apt_install("libgl1-mesa-glx", "libglib2.0-0")
     .pip_install(
         "numpy",
