@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restoration Mode state management
     let restorationMode = localStorage.getItem('restoration_mode') || 'canvas';
     let replicateApiToken = localStorage.getItem('replicate_api_token') || '';
-    let modalUrl = localStorage.getItem('modal_url') || 'https://justdarshan510--enhance.modal.run';
+    const modalUrl = 'https://justdarshan510--enhance.modal.run';
 
 
     // Card data definitions
@@ -106,17 +106,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectRestorationMode = document.getElementById('select-restoration-mode');
     const aiTokenContainer = document.getElementById('ai-token-container');
     const localServerContainer = document.getElementById('local-server-container');
-    const modalUrlContainer = document.getElementById('modal-url-container');
     const inputReplicateToken = document.getElementById('input-replicate-token');
-    const inputModalUrl = document.getElementById('input-modal-url');
 
     // Initialize Restoration inputs from saved state
     selectRestorationMode.value = restorationMode;
     aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
     localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
-    modalUrlContainer.style.display = (restorationMode === 'modal') ? 'block' : 'none';
     inputReplicateToken.value = replicateApiToken;
-    inputModalUrl.value = modalUrl;
 
     // Set up View Mode Toggle Listeners
     btnViewSlider.addEventListener('click', () => {
@@ -145,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('restoration_mode', restorationMode);
         aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
         localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
-        modalUrlContainer.style.display = (restorationMode === 'modal') ? 'block' : 'none';
         
         // Keep custom apple select trigger text and active element in sync
         syncAppleSelect();
@@ -201,13 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    inputModalUrl.addEventListener('input', (e) => {
-        modalUrl = e.target.value.trim();
-        localStorage.setItem('modal_url', modalUrl);
-        if (uploadedImageBase64) {
-            debounceProcess();
-        }
-    });
+    // Modal URL is now hardcoded globally, no input listener needed
 
     // Parameter sliders logic
     let debounceTimer = null;
