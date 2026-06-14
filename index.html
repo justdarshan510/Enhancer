@@ -95,6 +95,7 @@
                                 <option value="canvas">Canvas Math Pipeline (Instant)</option>
                                 <option value="replicate">Replicate Cloud AI (CodeFormer)</option>
                                 <option value="local">Local Python AI (Real-ESRGAN)</option>
+                                <option value="modal">Modal Serverless GPU (Real-ESRGAN)</option>
                             </select>
 
                             <!-- Apple-style Custom Select Dropdown -->
@@ -109,6 +110,7 @@
                                     <div class="apple-select-option" data-value="canvas">Canvas Math Pipeline (Instant)</div>
                                     <div class="apple-select-option" data-value="replicate">Replicate Cloud AI (CodeFormer)</div>
                                     <div class="apple-select-option" data-value="local">Local Python AI (Real-ESRGAN)</div>
+                                    <div class="apple-select-option" data-value="modal">Modal Serverless GPU (Real-ESRGAN)</div>
                                 </div>
                             </div>
                         </div>
@@ -124,6 +126,15 @@
                         <div class="parameter-item" id="local-server-container" style="display: none; transition: all 0.3s ease;">
                             <div class="help-text" style="color: var(--accent-color); font-weight: 500;">
                                 Run <code>python local_server.py</code> in a terminal to launch the local Real-ESRGAN backend.
+                            </div>
+                        </div>
+                        <div class="parameter-item" id="modal-url-container" style="display: none; transition: all 0.3s ease;">
+                            <div class="parameter-label">
+                                <span>Modal Web Endpoint URL</span>
+                            </div>
+                            <input type="text" class="text-input" id="input-modal-url" placeholder="Paste https://...-enhance.modal.run here">
+                            <div class="help-text">
+                                Run <code>modal deploy modal_app.py</code> and paste the deployed URL here.
                             </div>
                         </div>
                     </div>

@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restoration Mode state management
     let restorationMode = localStorage.getItem('restoration_mode') || 'canvas';
     let replicateApiToken = localStorage.getItem('replicate_api_token') || '';
+    let modalUrl = localStorage.getItem('modal_url') || '';
 
     // Card data definitions
     const cardsData = [
@@ -104,13 +105,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectRestorationMode = document.getElementById('select-restoration-mode');
     const aiTokenContainer = document.getElementById('ai-token-container');
     const localServerContainer = document.getElementById('local-server-container');
+    const modalUrlContainer = document.getElementById('modal-url-container');
     const inputReplicateToken = document.getElementById('input-replicate-token');
+    const inputModalUrl = document.getElementById('input-modal-url');
 
     // Initialize Restoration inputs from saved state
     selectRestorationMode.value = restorationMode;
     aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
     localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
+    modalUrlContainer.style.display = (restorationMode === 'modal') ? 'block' : 'none';
     inputReplicateToken.value = replicateApiToken;
+    inputModalUrl.value = modalUrl;
 
     // Set up View Mode Toggle Listeners
     btnViewSlider.addEventListener('click', () => {
@@ -139,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('restoration_mode', restorationMode);
         aiTokenContainer.style.display = (restorationMode === 'replicate') ? 'block' : 'none';
         localServerContainer.style.display = (restorationMode === 'local') ? 'block' : 'none';
+        modalUrlContainer.style.display = (restorationMode === 'modal') ? 'block' : 'none';
         
         // Keep custom apple select trigger text and active element in sync
         syncAppleSelect();
@@ -194,6 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    inputModalUrl.addEventListener('input', (e) => {
+        modalUrl = e.target.value.trim();
+        localStorage.setItem('modal_url', modalUrl);
+        if (uploadedImageBase64) {
+            debounceProcess();
+        }
+    });
+
     // Parameter sliders logic
     let debounceTimer = null;
     function debounceProcess() {
@@ -231,6 +245,22 @@ document.addEventListener('DOMContentLoaded', () => {
                             afterBadge.textContent = isLocalSuccess ? "4K Local AI Enhanced" : "4K Canvas Enhanced";
                             afterBadge.style.background = isLocalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
                             afterBadge.style.color = isLocalSuccess ? "#99ffbb" : "#ffcc99";
+                        }
+                    });
+                } else if (restorationMode === 'modal') {
+                    if (afterBadge) {
+                        afterBadge.textContent = "Modal AI Restoring...";
+                        afterBadge.style.background = "rgba(0, 180, 255, 0.45)";
+                        afterBadge.style.color = "#ffffff";
+                    }
+                    processImageModal(uploadedImageBase64, (processedDataUrl, isModalSuccess) => {
+                        processedImageBase64 = processedDataUrl;
+                        afterImg.src = processedDataUrl;
+                        sideAfterImg.src = processedDataUrl;
+                        if (afterBadge) {
+                            afterBadge.textContent = isModalSuccess ? "4K Modal AI Enhanced" : "4K Canvas Enhanced";
+                            afterBadge.style.background = isModalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
+                            afterBadge.style.color = isModalSuccess ? "#99ffbb" : "#ffcc99";
                         }
                     });
                 } else {
@@ -1030,6 +1060,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Modal GPU Serverless Integration
+    function processImageModal(imgSrc, callback) {
+        if (!modalUrl) {
+            showToast("Please enter a valid Modal Web Endpoint URL.");
+            processImage(imgSrc, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), false, (res) => callback(res, false));
+            return;
+        }
+
+        fetch(modalUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ image: imgSrc })
+        })
+        .then(res => {
+            if (!res.ok) {
+                throw new Error("Modal GPU serverless enhancement failed.");
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (data.output) {
+                callback(data.output, true);
+            } else {
+                throw new Error(data.error || "No output returned from Modal server.");
+            }
+        })
+        .catch(err => {
+            console.error("Modal GPU Error:", err);
+            showToast("Modal GPU backend unreachable. Check if your endpoint is active and URL is correct.");
+            // Fallback to local Canvas restoration
+            processImage(imgSrc, parseInt(sliderEnhance.value), parseInt(sliderDenoise.value), false, (res) => callback(res, false));
+        });
+    }
+
     // Helper: 3x3 Bilateral Filter for Denoising (Preserves sharp transitions like lips/eyes and avoids oil painting texture)
     function applyBilateralFilter(pixels, w, h, sigmaD, sigmaR) {
         const output = new Uint8ClampedArray(pixels.length);
@@ -1266,6 +1332,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     afterBadge.textContent = isLocalSuccess ? "4K Local AI Enhanced" : "4K Canvas Enhanced";
                     afterBadge.style.background = isLocalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
                     afterBadge.style.color = isLocalSuccess ? "#99ffbb" : "#ffcc99";
+                }
+            });
+        } else if (restorationMode === 'modal') {
+            if (afterBadge) {
+                afterBadge.textContent = "Modal AI Restoring...";
+                afterBadge.style.background = "rgba(0, 180, 255, 0.45)";
+                afterBadge.style.color = "#ffffff";
+            }
+            processImageModal(imageSrc, (processedDataUrl, isModalSuccess) => {
+                processedImageBase64 = processedDataUrl;
+                beforeImg.src = imageSrc;
+                afterImg.src = processedDataUrl;
+                sideBeforeImg.src = imageSrc;
+                sideAfterImg.src = processedDataUrl;
+                
+                if (activeViewMode === 'slider') {
+                    sliderViewContainer.style.display = 'flex';
+                    sideBySideContainer.style.display = 'none';
+                } else {
+                    sideBySideContainer.style.display = 'flex';
+                    sliderViewContainer.style.display = 'none';
+                }
+                
+                if (afterBadge) {
+                    afterBadge.textContent = isModalSuccess ? "4K Modal AI Enhanced" : "4K Canvas Enhanced";
+                    afterBadge.style.background = isModalSuccess ? "rgba(0, 255, 100, 0.15)" : "rgba(255, 165, 0, 0.15)";
+                    afterBadge.style.color = isModalSuccess ? "#99ffbb" : "#ffcc99";
                 }
             });
         } else {

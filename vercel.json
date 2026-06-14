@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api-replicate/:path*",
+      "destination": "https://api.replicate.com/:path*"
+    }
+  ]
+}
