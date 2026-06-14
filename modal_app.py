@@ -3,6 +3,8 @@ import os
 import numpy as np
 import cv2
 import modal
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # 1. Define the Modal App
 app = modal.App("photo-enhancer")
@@ -40,88 +42,102 @@ def download_models():
     gpu="T4",
     timeout=600
 )
-@modal.fastapi_endpoint(method="POST", label="enhance")
-def enhance(request_data: dict):
-    image_base64 = request_data.get("image")
-    if not image_base64:
-        return {"error": "Missing 'image' key in request JSON."}
+@modal.asgi_app(label="enhance")
+def fastapi_app():
+    web_app = FastAPI()
+    
+    web_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-    # Strip base64 header if present
-    if ',' in image_base64:
-        image_base64 = image_base64.split(',')[1]
+    def run_enhancement(request_data: dict):
+        image_base64 = request_data.get("image")
+        if not image_base64:
+            return {"error": "Missing 'image' key in request JSON."}
 
-    image_data = base64.b64decode(image_base64)
-    nparr = np.frombuffer(image_data, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        return {"error": "Could not decode input image."}
+        # Strip base64 header if present
+        if ',' in image_base64:
+            image_base64 = image_base64.split(',')[1]
 
-    try:
-        import torch
-        from realesrgan import RealESRGANer
-        from realesrgan.archs.srvgg_arch import SRVGGNetCompact
+        image_data = base64.b64decode(image_base64)
+        nparr = np.frombuffer(image_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return {"error": "Could not decode input image."}
 
-        # We'll use the RealESRGAN_x4plus or RealESRGANv2-anime-xsg model depending on speed/detail
-        # RealESRGAN_x4plus is the standard model for general photos
-        # Let's set up the model
-        model_name = "RealESRGAN_x4plus"
-        
-        # RealESRGANer helper class handles downloading model weights if not present
-        # and runs the inference on GPU
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
-        # Initialize upscaler
-        from realesrgan.utils import RealESRGANer
-        # Re-import to avoid name issues
-        from basicsr.archs.rrdbnet_arch import RRDBNet
-        
-        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-        upscaler = RealESRGANer(
-            scale=4,
-            model_path=None, # auto-downloads
-            model=model,
-            tile=0, # no tile unless out of memory
-            tile_pad=10,
-            pre_pad=0,
-            half=True, # use half-precision on GPU (faster, uses less memory)
-            device=device
-        )
-
-        print("Enhancing image using serverless GPU Real-ESRGAN...")
-        # Run upscaling
-        enhanced, _ = upscaler.enhance(img, outscale=4)
-
-        # Encode back to PNG
-        success, encoded_img = cv2.imencode('.png', enhanced)
-        if not success:
-            return {"error": "Failed to encode processed image."}
-
-        out_base64 = base64.b64encode(encoded_img).decode('utf-8')
-        data_url = f"data:image/png;base64,{out_base64}"
-        
-        return {"output": data_url}
-
-    except Exception as e:
-        print("GPU Real-ESRGAN error, falling back to OpenCV FSRCNN CPU:", e)
-        # Fallback to standard OpenCV DNN (CPU) to ensure high availability
         try:
-            # Download model file if not exists
-            model_url = "https://github.com/Saafke/EDSR_Tensorflow/raw/master/models/FSRCNN_x4.pb"
-            model_path = "/tmp/FSRCNN_x4.pb"
-            if not os.path.exists(model_path):
-                import urllib.request
-                urllib.request.urlretrieve(model_url, model_path)
+            import torch
+            from realesrgan import RealESRGANer
+            from realesrgan.archs.srvgg_arch import SRVGGNetCompact
+
+            # RealESRGAN_x4plus is the standard model for general photos
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             
-            sr = cv2.dnn_superres.DnnSuperResImpl_create()
-            sr.readModel(model_path)
-            sr.setModel("fsrcnn", 4)
+            # Initialize upscaler
+            from realesrgan.utils import RealESRGANer
+            from basicsr.archs.rrdbnet_arch import RRDBNet
             
-            upscaled = sr.upsample(img)
-            refined = cv2.bilateralFilter(upscaled, d=5, sigmaColor=30, sigmaSpace=30)
-            
-            success, encoded_img = cv2.imencode('.png', refined)
+            model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+            upscaler = RealESRGANer(
+                scale=4,
+                model_path=None, # auto-downloads
+                model=model,
+                tile=0, # no tile unless out of memory
+                tile_pad=10,
+                pre_pad=0,
+                half=True, # use half-precision on GPU (faster, uses less memory)
+                device=device
+            )
+
+            print("Enhancing image using serverless GPU Real-ESRGAN...")
+            # Run upscaling
+            enhanced, _ = upscaler.enhance(img, outscale=4)
+
+            # Encode back to PNG
+            success, encoded_img = cv2.imencode('.png', enhanced)
+            if not success:
+                return {"error": "Failed to encode processed image."}
+
             out_base64 = base64.b64encode(encoded_img).decode('utf-8')
             data_url = f"data:image/png;base64,{out_base64}"
+            
             return {"output": data_url}
-        except Exception as fallback_error:
-            return {"error": f"Enhancement failed: {str(fallback_error)}"}
+
+        except Exception as e:
+            print("GPU Real-ESRGAN error, falling back to OpenCV FSRCNN CPU:", e)
+            # Fallback to standard OpenCV DNN (CPU) to ensure high availability
+            try:
+                # Download model file if not exists
+                model_url = "https://github.com/Saafke/EDSR_Tensorflow/raw/master/models/FSRCNN_x4.pb"
+                model_path = "/tmp/FSRCNN_x4.pb"
+                if not os.path.exists(model_path):
+                    import urllib.request
+                    urllib.request.urlretrieve(model_url, model_path)
+                
+                sr = cv2.dnn_superres.DnnSuperResImpl_create()
+                sr.readModel(model_path)
+                sr.setModel("fsrcnn", 4)
+                
+                upscaled = sr.upsample(img)
+                refined = cv2.bilateralFilter(upscaled, d=5, sigmaColor=30, sigmaSpace=30)
+                
+                success, encoded_img = cv2.imencode('.png', refined)
+                out_base64 = base64.b64encode(encoded_img).decode('utf-8')
+                data_url = f"data:image/png;base64,{out_base64}"
+                return {"output": data_url}
+            except Exception as fallback_error:
+                return {"error": f"Enhancement failed: {str(fallback_error)}"}
+
+    @web_app.post("/")
+    def enhance_root(request_data: dict):
+        return run_enhancement(request_data)
+
+    @web_app.post("/enhance")
+    def enhance_path(request_data: dict):
+        return run_enhancement(request_data)
+        
+    return web_app
