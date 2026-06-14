@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhancer — AI 3D Photo Enhancer (240p to 4K)</title>
+    <meta name="description" content="Upscale and enhance low-resolution photos to crystal clear 4K UHD quality. Interactive 3D photography showroom and split slider comparison.">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Film Grain Overlay -->
+    <div class="film-grain"></div>
+
+    <!-- Ambient background glowing circles -->
+    <div class="bg-ambient"></div>
+
+    <!-- Header navigation -->
+    <header>
+        <div class="logo-container" onclick="window.location.reload()">
+            <span class="logo-text">Enhancer</span>
+        </div>
+    </header>
+
+    <!-- Main Hero Landing Screen with 3D Carousel -->
+    <main class="hero-section" id="hero-section">
+        <div class="badge">The Best Style</div>
+        <h1 class="hero-title">Capturing Moments,<br>Crafting Stories</h1>
+        <p class="hero-subtitle">Discover The Art Of Photography Through Unique Perspectives And Timeless Imagery, Or Transform Your Photos With Our 4K Upscaling App.</p>
+        
+        <div class="hero-actions">
+            <button class="btn-primary" id="btn-try-app">Upscale Images</button>
+        </div>
+
+        <!-- 3D Carousel Dome container -->
+        <div class="carousel-container">
+            <div class="carousel-dome">
+                <!-- Javascript will inject 3D cards here -->
+            </div>
+            <!-- Ground radial rings for depth -->
+            <div class="ambient-rings">
+                <div class="ambient-ring ambient-ring-1"></div>
+                <div class="ambient-ring ambient-ring-2"></div>
+                <div class="ambient-ring ambient-ring-3"></div>
+            </div>
+        </div>
+
+        <!-- Floating Card Details Panel -->
+        <div class="card-details-panel">
+            <h3 class="details-title">Elegance In Boldness</h3>
+            <p class="details-desc">This photo was captured in a controlled studio environment, using sharp lighting to emphasize contrast and texture.</p>
+            <div class="details-tags">
+                <span class="details-tag">Bold Fashion</span>
+                <span class="details-tag">Luxury Life</span>
+                <span class="details-tag">Confident Vibes</span>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-primary" id="btn-enhance-card" style="padding: 10px 20px; font-size: 13px;">Enhance This Image</button>
+                <button class="details-close" id="btn-details-close">Close</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Photo Enhancer Interactive App Panel -->
+    <section class="enhancer-section" id="enhancer-section">
+        <div class="app-container">
+            
+            <!-- Left panel control controls -->
+            <div class="app-controls">
+                <div class="controls-header">
+                    <h2>Neural Enhancer</h2>
+                    <p>Reconstruct low-resolution pixels using multi-layered convolutional upscaling. Scale images from 240p to crisp 4K Ultra HD in real-time.</p>
+                    
+                    <div class="parameter-list">
+                        <div class="parameter-item">
+                            <div class="parameter-label">
+                                <span>Enhance Strength</span>
+                                <span class="parameter-value" id="slider-enhance-val">85%</span>
+                            </div>
+                            <input type="range" class="parameter-slider" id="slider-enhance" min="10" max="100" value="85">
+                        </div>
+                        <div class="parameter-item">
+                            <div class="parameter-label">
+                                <span>Denoise & Details</span>
+                                <span class="parameter-value" id="slider-denoise-val">90%</span>
+                            </div>
+                            <input type="range" class="parameter-slider" id="slider-denoise" min="10" max="100" value="90">
+                        </div>
+                        <div class="parameter-item" style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                            <div class="parameter-label">
+                                <span>Restoration Mode</span>
+                            </div>
+                            <!-- Native select hidden but kept for JS compatibility -->
+                            <select id="select-restoration-mode" style="display: none;">
+                                <option value="canvas">Canvas Math Pipeline (Instant)</option>
+                                <option value="replicate">Replicate Cloud AI (CodeFormer)</option>
+                                <option value="local">Local Python AI (Real-ESRGAN)</option>
+                            </select>
+
+                            <!-- Apple-style Custom Select Dropdown -->
+                            <div class="apple-select" id="apple-restoration-select">
+                                <div class="apple-select-trigger">
+                                    <span class="apple-select-trigger-text">Replicate Cloud AI (CodeFormer)</span>
+                                    <svg class="apple-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M1 1.5L5 4.5L9 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="apple-select-options">
+                                    <div class="apple-select-option" data-value="canvas">Canvas Math Pipeline (Instant)</div>
+                                    <div class="apple-select-option" data-value="replicate">Replicate Cloud AI (CodeFormer)</div>
+                                    <div class="apple-select-option" data-value="local">Local Python AI (Real-ESRGAN)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="parameter-item" id="ai-token-container" style="display: none; transition: all 0.3s ease;">
+                            <div class="parameter-label">
+                                <span>Replicate API Token</span>
+                            </div>
+                            <input type="password" class="text-input" id="input-replicate-token" placeholder="Paste r8_... token here">
+                            <div class="help-text">
+                                Get a token from <a href="https://replicate.com/account" target="_blank">replicate.com</a>. Stored locally.
+                            </div>
+                        </div>
+                        <div class="parameter-item" id="local-server-container" style="display: none; transition: all 0.3s ease;">
+                            <div class="help-text" style="color: var(--accent-color); font-weight: 500;">
+                                Run <code>python local_server.py</code> in a terminal to launch the local Real-ESRGAN backend.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="enhancer-buttons">
+                    <button class="btn-primary" id="btn-download" style="width: 100%;">Download 4K UHD</button>
+                    <button class="btn-secondary" id="btn-upscale-another" style="width: 100%;">Upscale Another Image</button>
+                    <button class="btn-secondary" id="btn-close-enhancer" style="width: 100%; border-color: transparent; background: none;">Back to Showroom</button>
+                </div>
+            </div>
+
+            <!-- Right panel interactive workspace -->
+            <div class="app-workspace">
+                <div class="workspace-grid"></div>
+
+                <!-- State 1: Dropzone for Uploading -->
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 15V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="dropzone-text">Upload image to upscale</div>
+                    <div class="dropzone-sub">Drag & drop your photo, or click to browse. Supports JPG, PNG. Max size 25MB.</div>
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
+                </div>
+
+                <!-- State 2: Simulated Neural Processing -->
+                <div class="processing-container" id="processing-container">
+                    <svg class="spinner-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.05)" stroke-width="4"/>
+                        <circle class="spinner-circle" cx="50" cy="50" r="45" stroke="white" stroke-width="4"/>
+                    </svg>
+                    <div class="processing-console" id="console-logs">
+                        <!-- Simulated lines generated via JS -->
+                    </div>
+                </div>
+
+                <!-- View Mode Toggle Buttons (hidden by default, shown when images are loaded) -->
+                <div class="view-mode-toggle" id="view-mode-toggle" style="display: none;">
+                    <button class="btn-toggle active" id="btn-view-slider">Split Slider</button>
+                    <button class="btn-toggle" id="btn-view-side">Side-by-Side</button>
+                </div>
+
+                <!-- State 3: Interactive Split-screen Comparison Slider -->
+                <div class="slider-view-container" id="slider-view-container">
+                    <div class="slider-wrapper" id="slider-wrapper">
+                        <!-- Before image (blurry 240p filter applied) -->
+                        <img id="before-img" class="slider-img before" src="assets/demo.png" alt="240p Low Resolution">
+                        <!-- After image (fully rendered crisp) -->
+                        <img id="after-img" class="slider-img after" src="assets/demo.png" alt="4K UHD Enhanced">
+                        
+                        <!-- Badges labeling the states -->
+                        <div class="slider-badge before-badge">Original Image</div>
+                        <div class="slider-badge after-badge">4K Enhanced</div>
+
+                        <!-- Draggable divider line and handle button -->
+                        <div class="slider-handle" id="slider-handle">
+                            <div class="slider-handle-button">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- State 4: Side-by-Side Comparison -->
+                <div class="side-by-side-container" id="side-by-side-container" style="display: none;">
+                    <div class="comparison-card before-card">
+                        <div class="card-image-wrapper">
+                            <img id="side-before-img" class="side-img before-blur" src="assets/demo.png" alt="Before Original">
+                        </div>
+                        <div class="card-label before-label">BEFORE</div>
+                    </div>
+                    
+                    <div class="comparison-arrow">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    
+                    <div class="comparison-card after-card">
+                        <div class="card-image-wrapper">
+                            <img id="side-after-img" src="assets/demo.png" alt="After Enhanced">
+                        </div>
+                        <div class="card-label after-label">AFTER</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Global Toast Alerts -->
+    <div class="toast" id="toast">Saved successfully!</div>
+
+    <script src="app.js"></script>
+</body>
+</html>

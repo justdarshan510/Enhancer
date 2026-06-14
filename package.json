@@ -1,0 +1,13 @@
+{
+  "name": "radika-photo-enhancer",
+  "version": "1.0.0",
+  "description": "Radika 3D Photo Enhancer with pixel sharpening convolutions",
+  "scripts": {
+    "dev": "vite --port 8000 --open",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}

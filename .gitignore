@@ -1,0 +1,10 @@
+node_modules/
+extracted_frames/
+dist/
+.vite/
+*.log
+.DS_Store
+*.mp4
+*.jpg
+*.png
+!assets/demo.png
