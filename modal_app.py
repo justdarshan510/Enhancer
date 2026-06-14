@@ -45,7 +45,7 @@ def download_models():
     gpu="T4",
     timeout=600
 )
-@modal.web_endpoint(method="POST", label="enhance")
+@modal.fastapi_endpoint(method="POST", label="enhance")
 def enhance(request_data: dict):
     image_base64 = request_data.get("image")
     if not image_base64:
