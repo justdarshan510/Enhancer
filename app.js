@@ -16,7 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restoration Mode state management
     let restorationMode = localStorage.getItem('restoration_mode') || 'canvas';
     let replicateApiToken = localStorage.getItem('replicate_api_token') || '';
-    let modalUrl = localStorage.getItem('modal_url') || '';
+    let modalUrl = localStorage.getItem('modal_url') || 'https://justdarshan510--enhance.modal.run';
+
 
     // Card data definitions
     const cardsData = [
