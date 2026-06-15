@@ -921,8 +921,125 @@ document.addEventListener('DOMContentLoaded', () => {
                     let r = yVal + 1.13983 * vNew;
                     let g = yVal - 0.39465 * uNew - 0.58060 * vNew;
                     let b = yVal + 2.03211 * uNew;
-                    
-                    lowResultPixels[i] = Math.min(255, Math.max(0, r));
+
+                    // -----------------------------------------------------------------
+                    // GREEN ORANGE CINEMATIC GRADE — applied at 60% intensity
+                    // Parameters: Brightness+7, Contrast+17, Saturation+12,
+                    // Brilliance+14, Sharpen+11, Clarity+55, Highlight+11,
+                    // Shadow+0, White-7, Black-4, Temp+5, Hue-6
+                    // -----------------------------------------------------------------
+                    const goIntensity = 0.60; // 60% blend
+
+                    // Normalise to 0-1
+                    let rn = r / 255;
+                    let gn = g / 255;
+                    let bn = b / 255;
+
+                    // 1. Brightness +7  →  linear lift ~+0.027
+                    const brightnessShift = 7 / 255;
+                    rn += brightnessShift;
+                    gn += brightnessShift;
+                    bn += brightnessShift;
+
+                    // 2. Contrast +17  →  S-curve steepened by ~0.067
+                    const contrastGO = 1.0 + 17 / 255;
+                    rn = (rn - 0.5) * contrastGO + 0.5;
+                    gn = (gn - 0.5) * contrastGO + 0.5;
+                    bn = (bn - 0.5) * contrastGO + 0.5;
+
+                    // 3. Black-point -4  →  compress shadow floor (lift blacks slightly away from pure black)
+                    // Black -4 in Apple Photos compresses the toe
+                    const blackPt = -4 / 255; // small crush toward darker
+                    rn = rn + blackPt * (1 - rn);
+                    gn = gn + blackPt * (1 - gn);
+                    bn = bn + blackPt * (1 - bn);
+
+                    // 4. White-point -7  →  pull highlights down slightly
+                    const whitePt = 1.0 - 7 / 255;
+                    rn = rn * whitePt;
+                    gn = gn * whitePt;
+                    bn = bn * whitePt;
+
+                    // 5. Highlight +11  →  boost highlights (values > 0.6)
+                    const hlGain = 11 / 255;
+                    const hlMask = Math.max(0, rn * 0.299 + gn * 0.587 + bn * 0.114 - 0.6) / 0.4;
+                    rn += hlGain * hlMask;
+                    gn += hlGain * hlMask;
+                    bn += hlGain * hlMask;
+
+                    // 6. Temperature +5  →  warm tint: add red, subtract blue slightly
+                    const tempShift = 5 / 255;
+                    rn += tempShift * 0.6;
+                    gn += tempShift * 0.1;
+                    bn -= tempShift * 0.5;
+
+                    // 7. Saturation +12  →  boost chroma in HSL space (approx via luminance)
+                    const lumGO = 0.299 * rn + 0.587 * gn + 0.114 * bn;
+                    const satBoostGO = 1.0 + 12 / 100;
+                    rn = lumGO + (rn - lumGO) * satBoostGO;
+                    gn = lumGO + (gn - lumGO) * satBoostGO;
+                    bn = lumGO + (bn - lumGO) * satBoostGO;
+
+                    // 8. Brilliance +14  →  Apple Brilliance = lift dark saturated areas
+                    //    Approximated as: brighten pixels below 0.5 luminance proportionally
+                    const lumBr = 0.299 * rn + 0.587 * gn + 0.114 * bn;
+                    const brillianceMask = Math.max(0, 1 - lumBr * 2);
+                    const brillianceGain = 14 / 255 * brillianceMask;
+                    rn += brillianceGain;
+                    gn += brillianceGain;
+                    bn += brillianceGain;
+
+                    // 9. Clarity +55  →  midtone contrast boost (unsharp mask on luminance already done)
+                    //    Approximate clarity as a local contrast lift on midtones only
+                    const clarityLum = 0.299 * rn + 0.587 * gn + 0.114 * bn;
+                    const clarityMask = 1 - Math.abs(clarityLum - 0.5) * 2; // peaks at midtone
+                    const clarityGain = 55 / 1000 * clarityMask * (clarityLum - 0.5);
+                    rn += clarityGain;
+                    gn += clarityGain;
+                    bn += clarityGain;
+
+                    // 10. Hue -6  →  slight hue rotation towards teal/green (shift hue by -6°)
+                    //     Implemented as a matrix rotation in RGB space
+                    const hueRad = (-6 * Math.PI) / 180;
+                    const cosH = Math.cos(hueRad);
+                    const sinH = Math.sin(hueRad);
+                    const rHue = rn * (cosH + (1 - cosH) / 3 + Math.sqrt(1/3) * sinH)
+                               + gn * ((1 - cosH) / 3 - Math.sqrt(1/3) * sinH)
+                               + bn * ((1 - cosH) / 3 + Math.sqrt(1/3) * sinH);
+                    const gHue = rn * ((1 - cosH) / 3 + Math.sqrt(1/3) * sinH)
+                               + gn * (cosH + (1 - cosH) / 3)
+                               + bn * ((1 - cosH) / 3 - Math.sqrt(1/3) * sinH);
+                    const bHue = rn * ((1 - cosH) / 3 - Math.sqrt(1/3) * sinH)
+                               + gn * ((1 - cosH) / 3 + Math.sqrt(1/3) * sinH)
+                               + bn * (cosH + (1 - cosH) / 3);
+                    rn = rHue; gn = gHue; bn = bHue;
+
+                    // 11. GREEN ORANGE SPLIT TONE
+                    //     Shadows → teal (green-blue), Highlights → orange (red-warm)
+                    const lumSplit = 0.299 * rn + 0.587 * gn + 0.114 * bn;
+                    // Shadow teal mask: strong in darks, fades to 0 by mid-tone
+                    const shadowMask = Math.max(0, 1 - lumSplit / 0.45);
+                    const shadowMaskSq = shadowMask * shadowMask;
+                    rn -= 0.018 * shadowMaskSq;  // remove red from shadows
+                    gn += 0.014 * shadowMaskSq;  // add green to shadows
+                    bn += 0.025 * shadowMaskSq;  // add blue to shadows → teal
+                    // Highlight orange mask: strong in brights, fades to 0 by mid-tone
+                    const highlightMask = Math.max(0, (lumSplit - 0.55) / 0.45);
+                    const highlightMaskSq = highlightMask * highlightMask;
+                    rn += 0.030 * highlightMaskSq; // add red to highlights → orange
+                    gn += 0.008 * highlightMaskSq; // small green to keep warm
+                    bn -= 0.020 * highlightMaskSq; // remove blue from highlights
+
+                    // Blend grade at goIntensity (60%) over the ungraded RGB
+                    const rGraded = rn * 255;
+                    const gGraded = gn * 255;
+                    const bGraded = bn * 255;
+
+                    r = r + (rGraded - r) * goIntensity;
+                    g = g + (gGraded - g) * goIntensity;
+                    b = b + (bGraded - b) * goIntensity;
+
+                    lowResultPixels[i]     = Math.min(255, Math.max(0, r));
                     lowResultPixels[i + 1] = Math.min(255, Math.max(0, g));
                     lowResultPixels[i + 2] = Math.min(255, Math.max(0, b));
                     lowResultPixels[i + 3] = denoisedPixels[i + 3];
