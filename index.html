@@ -70,25 +70,8 @@
                 <div class="controls-header">
                     <h2>Neural Enhancer</h2>
                     <p>Reconstruct low-resolution pixels using multi-layered convolutional upscaling. Scale images from 240p to crisp 4K Ultra HD in real-time.</p>
-                </div>
-
-                <!-- Quick Stats Chips -->
-                <div class="stat-chips" style="margin-top: 20px;">
-                    <div class="stat-chip">
-                        <span class="stat-chip-label">Upscale</span>
-                        <span class="stat-chip-value accent">4×</span>
-                    </div>
-                    <div class="stat-chip">
-                        <span class="stat-chip-label">Quality</span>
-                        <span class="stat-chip-value warm">4K</span>
-                    </div>
-                    <div class="stat-chip">
-                        <span class="stat-chip-label">Engine</span>
-                        <span class="stat-chip-value" style="font-size:12px; color: var(--text-secondary);">Neural</span>
-                    </div>
-                </div>
-
-                    <div class="parameter-list" style="margin-top:20px;">
+                    
+                    <div class="parameter-list">
                         <div class="parameter-item">
                             <div class="parameter-label">
                                 <span>Enhance Strength</span>
@@ -98,7 +81,7 @@
                         </div>
                         <div class="parameter-item">
                             <div class="parameter-label">
-                                <span>Denoise &amp; Details</span>
+                                <span>Denoise & Details</span>
                                 <span class="parameter-value" id="slider-denoise-val">90%</span>
                             </div>
                             <input type="range" class="parameter-slider" id="slider-denoise" min="10" max="100" value="90">
@@ -156,19 +139,13 @@
                 <!-- State 1: Dropzone for Uploading -->
                 <div class="dropzone" id="dropzone">
                     <div class="dropzone-icon">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="#63b3ed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M3 15V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V15" stroke="#63b3ed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 15V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </div>
-                    <div class="dropzone-text">Drop your image here</div>
-                    <div class="dropzone-sub">Drag &amp; drop your photo, or click to browse.<br>Upscales to crisp 4K Ultra HD in seconds.</div>
-                    <div class="dropzone-formats">
-                        <span class="format-badge">JPG</span>
-                        <span class="format-badge">PNG</span>
-                        <span class="format-badge">WEBP</span>
-                        <span class="format-badge">Max 25MB</span>
-                    </div>
+                    <div class="dropzone-text">Upload image to upscale</div>
+                    <div class="dropzone-sub">Drag & drop your photo, or click to browse. Supports JPG, PNG. Max size 25MB.</div>
                     <input type="file" id="file-input" accept="image/*" style="display: none;">
                 </div>
 
