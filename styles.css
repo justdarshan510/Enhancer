@@ -1379,3 +1379,90 @@ input:checked + .switch-slider:before {
         height: 36px;
     }
 }
+
+/* ──────────────────────────────────────────────────
+   DETAIL ADDITIONS — layout & colors untouched
+────────────────────────────────────────────────── */
+
+/* Stat chips row — fills the visible gap between sliders & mode */
+.stat-chips {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    margin-bottom: 4px;
+}
+
+.stat-chip {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 9px 8px;
+    text-align: center;
+}
+
+.stat-chip-label {
+    display: block;
+    font-size: 9px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+}
+
+.stat-chip-value {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stat-chip-value.accent { color: var(--accent-color); }
+.stat-chip-value.warm   { color: #f6ad55; }
+
+/* Slider — filled portion left of thumb */
+.parameter-slider {
+    background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0.55) 0%,
+        rgba(255, 255, 255, 0.55) var(--fill, 85%),
+        rgba(255, 255, 255, 0.10) var(--fill, 85%),
+        rgba(255, 255, 255, 0.10) 100%
+    ) !important;
+}
+
+/* Format badges inside the dropzone */
+.dropzone-formats {
+    display: flex;
+    gap: 6px;
+    margin-top: 18px;
+}
+
+.format-badge {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+/* Subtle pulse ring behind the dropzone icon */
+.dropzone-icon { position: relative; }
+.dropzone-icon::after {
+    content: '';
+    position: absolute;
+    inset: -7px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    animation: iconRingPulse 2.8s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes iconRingPulse {
+    0%, 100% { transform: scale(1);    opacity: 0.4; }
+    50%       { transform: scale(1.08); opacity: 0.9; }
+}
