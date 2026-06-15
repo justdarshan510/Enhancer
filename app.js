@@ -776,13 +776,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     vChannel[idx] = 0.615 * r - 0.51499 * g - 0.10001 * b + 128;
                 }
 
-                // Multi-scale Gaussian blurs
+                // Pre-compute blurred color channels for color-sharpening
+                const uBlurred = applyGaussianBlurY(uChannel, lw, lh, 1.0);
+                const vBlurred = applyGaussianBlurY(vChannel, lw, lh, 1.0);
+ 
+                // Multi-scale Gaussian blurs for luminance texture
                 const yBlurredFine = applyGaussianBlurY(yChannel, lw, lh, 1.0);
                 const yBlurredCoarse = applyGaussianBlurY(yChannel, lw, lh, 3.0);
                 const ySharp = new Float32Array(lw * lh);
                 
-                const sFine = 0.2 + (sharpenVal / 100) * 0.8;   // fine details weight (range 0.2 to 1.0)
-                const sCoarse = 0.1 + (sharpenVal / 100) * 0.4; // coarse details weight (range 0.1 to 0.5)
+                // Very gentle luminance sharpening (just for soft grain texture)
+                const sFine = 0.05 + (sharpenVal / 100) * 0.15;   // range 0.05 to 0.20
+                const sCoarse = 0.02 + (sharpenVal / 100) * 0.08; // range 0.02 to 0.10
                 
                 for (let i = 0; i < yChannel.length; i++) {
                     const diffFine = yChannel[i] - yBlurredFine[i];
@@ -791,26 +796,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     const absFine = Math.abs(diffFine);
                     const absCoarse = Math.abs(diffCoarse);
                     
-                    // Detail weight Wd ranges from 0.0 (skin/flat) to 1.0 (edges/eyes/glasses/hair/lips)
                     let Wd = detailDensity[i] / 4.0;
                     Wd = Math.min(1.0, Math.max(0.0, Wd));
                     
-                    // Noise coring: suppress small variations to prevent grain amplification
+                    // Noise coring
                     const cleanDiffFine = absFine < 2.0 ? 0 : diffFine * ((absFine - 2.0) / absFine);
                     const cleanDiffCoarse = absCoarse < 1.5 ? 0 : diffCoarse * ((absCoarse - 1.5) / absCoarse);
                     
-                    // In flat areas, reduce fine sharpening. In detail areas, boost fine sharpening.
                     const localSFine = sFine * (0.15 + 0.85 * Wd);
                     const localSCoarse = sCoarse * (0.3 + 0.7 * Wd);
                     
-                    // Soft-threshold details to avoid noise amplification in flat regions (like skin)
-                    // and suppress highlights that could cause halos.
                     const modFine = absFine / (absFine + 3.0);
                     const modCoarse = absCoarse / (absCoarse + 5.0);
                     
-                    // Clamp difference to mitigate halos and oversharpening
-                    const clampedFine = Math.max(-10, Math.min(10, cleanDiffFine));
-                    const clampedCoarse = Math.max(-8, Math.min(8, cleanDiffCoarse));
+                    const clampedFine = Math.max(-6, Math.min(6, cleanDiffFine));
+                    const clampedCoarse = Math.max(-4, Math.min(4, cleanDiffCoarse));
                     
                     ySharp[i] = yChannel[i] + localSFine * modFine * clampedFine + localSCoarse * modCoarse * clampedCoarse;
                 }
@@ -818,50 +818,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 // -----------------------------------------------------------------
                 // STEP 3: CLAHE Contrast Enhancement
                 // -----------------------------------------------------------------
-                const clipLimit = 1.0 + (sharpenVal / 100) * 0.4; // range 1.0 to 1.4 (gentle local contrast enhancement)
+                const clipLimit = 1.0 + (sharpenVal / 100) * 0.3; // range 1.0 to 1.3 (gentle local contrast enhancement)
                 const yClahe = applyCLAHE(ySharp, lw, lh, 8, 8, clipLimit);
 
                 // -----------------------------------------------------------------
-                // STEP 4: Edge Enhancement (Laplacian)
+                // STEP 4: Edge Enhancement (Bypassed Laplacian on Luminance to prevent halos)
                 // -----------------------------------------------------------------
-                const yFinal = new Float32Array(lw * lh);
-                const edgeStrength = (sharpenVal / 100) * 0.03; // edge gain (reduced from 0.12)
-                
-                for (let y = 0; y < lh; y++) {
-                    for (let x = 0; x < lw; x++) {
-                        const idx = y * lw + x;
-                        
-                        let laplacian = 0;
-                        if (y > 0 && y < lh - 1 && x > 0 && x < lw - 1) {
-                            laplacian = 8 * yClahe[idx] - 
-                                        yClahe[idx - 1] - yClahe[idx + 1] - 
-                                        yClahe[idx - lw] - yClahe[idx + lw] -
-                                        yClahe[idx - lw - 1] - yClahe[idx - lw + 1] -
-                                        yClahe[idx + lw - 1] - yClahe[idx + lw + 1];
-                        }
-                        
-                        // Noise-suppressed soft-thresholding on Laplacian to keep edges clean without pixelation
-                        const absLap = Math.abs(laplacian);
-                        const edgeMod = absLap > 3.0 ? (absLap - 3.0) / absLap : 0;
-                        const clampedEdge = Math.max(-5, Math.min(5, laplacian * edgeMod));
-                        
-                        // Scale edge enhancement by local detail weight
-                        let Wd = detailDensity[idx] / 4.0;
-                        Wd = Math.min(1.0, Math.max(0.0, Wd));
-                        const localEdgeStrength = edgeStrength * (0.1 + 0.9 * Wd);
-                        
-                        yFinal[idx] = Math.min(255, Math.max(0, yClahe[idx] + localEdgeStrength * clampedEdge));
-                    }
-                }
+                const yFinal = yClahe; 
 
                 // Convert back from YUV to RGB space with high-fidelity Orton bloom, skin-tone protection vibrance & warming
                 const lowResultData = lowCtx.createImageData(lw, lh);
                 const lowResultPixels = lowResultData.data;
                 
                 // Pre-compute parameters
-                const bloomAmount = 0.05 + (sharpenVal / 100) * 0.05; // Orton bloom strength 5% - 10% (linear mix)
-                const contrastStrength = 0.10 + (sharpenVal / 100) * 0.10; // Dynamic contrast blend 10% - 20%
-                const warmthShift = 0.05 + (sharpenVal / 100) * 0.10; // very subtle shift 0.05 to 0.15 units
+                const bloomAmount = 0.04 + (sharpenVal / 100) * 0.04; // Orton bloom strength 4% - 8% (linear mix)
+                const contrastStrength = 0.08 + (sharpenVal / 100) * 0.08; // Dynamic contrast blend 8% - 16%
+                const warmthShift = 0.05 + (sharpenVal / 100) * 0.05; // very subtle shift 0.05 to 0.10 units
                 
                 for (let i = 0; i < lowResultPixels.length; i += 4) {
                     const idx = i / 4;
@@ -896,22 +868,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     yNorm = (1 - contrastStrength) * yNorm + contrastStrength * yContrast;
                     yVal = yNorm * 255;
 
-                    // 4. Skin-Tone Detection & Protection (U/V space)
-                    const uDiff = uVal - 128;
-                    const vDiff = vVal - 128;
+                    // 4. Color (Chrominance) Sharpening in U/V channels
+                    const uDiffOrig = uVal - uBlurred[idx];
+                    const vDiffOrig = vVal - vBlurred[idx];
+                    const colorSharpenFactor = 0.20 + (sharpenVal / 100) * 0.40; // range 0.20 to 0.60
+                    const uSharpened = uVal + uDiffOrig * colorSharpenFactor;
+                    const vSharpened = vVal + vDiffOrig * colorSharpenFactor;
+
+                    // 5. Skin-Tone Detection & Protection (U/V space)
+                    const uDiff = uSharpened - 128;
+                    const vDiff = vSharpened - 128;
                     
                     // Proximity to classic skin tone coordinates (uDiff ~ -20, vDiff ~ +20)
                     const distUSkin = uDiff - (-20);
                     const distVSkin = vDiff - 20;
                     const skinProximity = Math.exp(-(distUSkin * distUSkin + distVSkin * distVSkin) / 600); // 1.0 = skin, 0.0 = non-skin
                     
-                    // 5. High-fidelity Vibrance & Saturation (clamped to max 1.30)
+                    // 6. High-fidelity Vibrance & Saturation (clamped to max 1.25)
                     const chroma = Math.sqrt(uDiff * uDiff + vDiff * vDiff);
                     const vibranceBoost = 1.25 - 0.15 * (chroma / 128); // ranges from 1.25 to 1.10
                     let satFactor = vibranceBoost * (0.85 + (sharpenVal / 100) * 0.15); // range ~ 0.95 to 1.25
                     
                     // Clamp saturation factor to avoid extreme color pop
-                    satFactor = Math.max(0.90, Math.min(1.30, satFactor));
+                    satFactor = Math.max(0.90, Math.min(1.25, satFactor));
                     
                     // Prevent skin tones from becoming over-saturated or sunburned/orange
                     if (skinProximity > 0.1) {
@@ -922,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let uNew = uDiff * satFactor;
                     let vNew = vDiff * satFactor;
                     
-                    // 6. Color Temperature Tuning (Subtle warm glow)
+                    // 7. Color Temperature Tuning (Subtle warm glow)
                     uNew = uNew - warmthShift * 0.4;
                     vNew = vNew + warmthShift * 0.8;
                     
