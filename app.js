@@ -735,28 +735,121 @@ document.addEventListener('DOMContentLoaded', () => {
                 const detailDensity = applyBoxBlurY(tempYDiff, lw, lh, 2);
 
                 // -----------------------------------------------------------------
-                // STEP 1: Bilateral Filter (Denoise)
+                // STEP 1: Two-Stage Noise Reduction
+                //   Stage A — Bilateral filter (full strength) on all channels
+                //   Stage B — Fast NLM-style luma-only pass on Y channel
                 // -----------------------------------------------------------------
-                const sigmaD = 2.0; 
-                const sigmaR = 8.0 + ((100 - denoiseVal) / 100) * 16.0; // range 8 to 24
+
+                // ── Stage A: Bilateral filter ──────────────────────────────────
+                // sigmaD controls spatial spread, sigmaR controls how different
+                // pixel values are allowed to be before the filter stops blending.
+                // Higher denoiseVal = smaller sigmaR = more smoothing.
+                const sigmaD = 2.5;
+                const sigmaR = 30.0 - (denoiseVal / 100) * 22.0; // range 30→8: stronger denoise at 100
                 const bilateralPixels = applyBilateralFilter(inputPixels, lw, lh, sigmaD, sigmaR);
-                
-                // Blend original back in adaptively based on detail density
-                // Flat/skin areas get stronger denoising, detail areas get minimal denoising
+
+                // Full-strength bilateral blend (not capped at 20% anymore)
+                // Detail-density mask: high-frequency areas keep more original;
+                // flat/noisy areas receive full bilateral output.
                 const denoisedPixels = new Uint8ClampedArray(inputPixels.length);
-                const alphaBase = (denoiseVal / 100) * 0.20; 
+                const bilateralStrength = 0.30 + (denoiseVal / 100) * 0.55; // 0.30→0.85
                 for (let i = 0; i < inputPixels.length; i += 4) {
                     const idx = i / 4;
-                    let Wd = detailDensity[idx] / 4.0;
+                    // Wd: 0 = flat/noisy area, 1 = sharp detail — protect details
+                    let Wd = detailDensity[idx] / 5.0;
                     Wd = Math.min(1.0, Math.max(0.0, Wd));
-                    
-                    const adaptiveAlpha = Math.min(0.40, alphaBase * (1.5 - Wd));
-                    
-                    denoisedPixels[i] = adaptiveAlpha * bilateralPixels[i] + (1 - adaptiveAlpha) * inputPixels[i];
-                    denoisedPixels[i + 1] = adaptiveAlpha * bilateralPixels[i + 1] + (1 - adaptiveAlpha) * inputPixels[i + 1];
-                    denoisedPixels[i + 2] = adaptiveAlpha * bilateralPixels[i + 2] + (1 - adaptiveAlpha) * inputPixels[i + 2];
+                    const alpha = bilateralStrength * (1.0 - Wd * 0.7); // ease off near edges
+                    denoisedPixels[i]     = alpha * bilateralPixels[i]     + (1 - alpha) * inputPixels[i];
+                    denoisedPixels[i + 1] = alpha * bilateralPixels[i + 1] + (1 - alpha) * inputPixels[i + 1];
+                    denoisedPixels[i + 2] = alpha * bilateralPixels[i + 2] + (1 - alpha) * inputPixels[i + 2];
                     denoisedPixels[i + 3] = inputPixels[i + 3];
                 }
+
+                // ── Stage B: NLM-style Luma-Only Noise Reduction ───────────────
+                // Works in YUV space — only smooths Y (luma) to remove grain
+                // while leaving U/V (colour) intact → no colour smearing.
+                // Uses a 5×5 search window with 3×3 patch comparison.
+                const nlmY    = new Float32Array(lw * lh); // input luma
+                const nlmU    = new Float32Array(lw * lh);
+                const nlmV    = new Float32Array(lw * lh);
+                for (let i = 0; i < denoisedPixels.length; i += 4) {
+                    const r = denoisedPixels[i], g = denoisedPixels[i+1], b = denoisedPixels[i+2];
+                    const idx = i / 4;
+                    nlmY[idx] = 0.299 * r + 0.587 * g + 0.114 * b;
+                    nlmU[idx] = -0.14713 * r - 0.28886 * g + 0.436  * b + 128;
+                    nlmV[idx] =  0.615   * r - 0.51499 * g - 0.10001 * b + 128;
+                }
+
+                // NLM filter on Y only
+                // h controls filtering strength; patchR=1 (3×3 patch), searchR=3 (7×7 window)
+                const nlmH      = 4.0 + (denoiseVal / 100) * 14.0; // h: 4→18
+                const nlmH2     = nlmH * nlmH;
+                const patchR    = 1; // 3×3 patch
+                const searchR   = 3; // search ±3 px → 7×7 window
+                const patchSize = (2 * patchR + 1) * (2 * patchR + 1);
+                const nlmYOut   = new Float32Array(lw * lh);
+
+                for (let cy = 0; cy < lh; cy++) {
+                    for (let cx = 0; cx < lw; cx++) {
+                        const ci = cy * lw + cx;
+                        // Skip heavy computation in high-detail areas
+                        let Wd = detailDensity[ci] / 5.0;
+                        Wd = Math.min(1.0, Wd);
+                        if (Wd > 0.85) {
+                            nlmYOut[ci] = nlmY[ci]; // preserve sharp detail pixels as-is
+                            continue;
+                        }
+
+                        let weightSum = 0;
+                        let valueSum  = 0;
+
+                        // Search nearby patches
+                        const sy0 = Math.max(0, cy - searchR);
+                        const sy1 = Math.min(lh - 1, cy + searchR);
+                        const sx0 = Math.max(0, cx - searchR);
+                        const sx1 = Math.min(lw - 1, cx + searchR);
+
+                        for (let ny = sy0; ny <= sy1; ny++) {
+                            for (let nx = sx0; nx <= sx1; nx++) {
+                                // Compare 3×3 patch of luma around (cy,cx) vs (ny,nx)
+                                let patchDist = 0;
+                                for (let py = -patchR; py <= patchR; py++) {
+                                    for (let px = -patchR; px <= patchR; px++) {
+                                        const acy = Math.min(lh-1, Math.max(0, cy + py));
+                                        const acx = Math.min(lw-1, Math.max(0, cx + px));
+                                        const any = Math.min(lh-1, Math.max(0, ny + py));
+                                        const anx = Math.min(lw-1, Math.max(0, nx + px));
+                                        const diff = nlmY[acy * lw + acx] - nlmY[any * lw + anx];
+                                        patchDist += diff * diff;
+                                    }
+                                }
+                                patchDist /= patchSize;
+
+                                const w = Math.exp(-patchDist / nlmH2);
+                                weightSum += w;
+                                valueSum  += w * nlmY[ny * lw + nx];
+                            }
+                        }
+
+                        // Blend NLM result — ease in based on denoiseVal
+                        const nlmBlend = 0.25 + (denoiseVal / 100) * 0.60; // 0.25→0.85
+                        const nlmSmoothed = valueSum / weightSum;
+                        nlmYOut[ci] = nlmY[ci] + (nlmSmoothed - nlmY[ci]) * nlmBlend * (1.0 - Wd);
+                    }
+                }
+
+                // Write NLM-denoised luma back into denoisedPixels (keep U/V from bilateral)
+                for (let i = 0; i < denoisedPixels.length; i += 4) {
+                    const idx = i / 4;
+                    const yClean = nlmYOut[idx];
+                    const u = nlmU[idx] - 128;
+                    const v = nlmV[idx] - 128;
+                    denoisedPixels[i]     = Math.min(255, Math.max(0, yClean + 1.13983 * v));
+                    denoisedPixels[i + 1] = Math.min(255, Math.max(0, yClean - 0.39465 * u - 0.58060 * v));
+                    denoisedPixels[i + 2] = Math.min(255, Math.max(0, yClean + 2.03211 * u));
+                    // alpha unchanged
+                }
+
 
                 // -----------------------------------------------------------------
                 // STEP 2: Unsharp Mask (Luminance Sharpening)
