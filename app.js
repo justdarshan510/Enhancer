@@ -876,16 +876,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const bloomY = (sharpYNorm + blurYNorm) * 0.5;
                     yVal = ((1 - bloomAmount) * sharpYNorm + bloomAmount * bloomY) * 255;
                     
-                    // 2. Shadows and Highlights recovery (Dynamic Range protection)
+                    // 2. Shadows and Highlights recovery (Dynamic Range protection with black-point preservation)
                     let yNorm = yVal / 255;
-                    // Shadows recovery (lift dark values up to 0.35)
+                    // Shadows recovery (lift dark values but anchor absolute black to 0 to keep contrast deep)
                     if (yNorm < 0.35) {
-                        const shadowBoost = (0.35 - yNorm) * 0.40 * (denoiseVal / 100);
+                        const shadowBoost = yNorm * (0.35 - yNorm) * 1.2 * (denoiseVal / 100);
                         yNorm += shadowBoost;
                     }
-                    // Highlights preservation (gently pull back highlights above 0.75)
-                    if (yNorm > 0.75) {
-                        const highlightCompress = (yNorm - 0.75) * 0.15;
+                    // Highlights preservation (gently pull back bright values to prevent clipping, keeping pure white at 1.0)
+                    if (yNorm > 0.75 && yNorm < 0.98) {
+                        const highlightCompress = (yNorm - 0.75) * (1.0 - yNorm) * 0.4;
                         yNorm -= highlightCompress;
                     }
                     
