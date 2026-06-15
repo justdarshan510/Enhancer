@@ -727,12 +727,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let i = 0; i < inputPixels.length; i += 4) {
                     tempY[i / 4] = 0.299 * inputPixels[i] + 0.587 * inputPixels[i + 1] + 0.114 * inputPixels[i + 2];
                 }
-                const tempYBlurred = applyGaussianBlurY(tempY, lw, lh, 1.0);
+                const tempYBlurred = applyBoxBlurY(tempY, lw, lh, 1);
                 const tempYDiff = new Float32Array(lw * lh);
                 for (let i = 0; i < tempY.length; i++) {
                     tempYDiff[i] = Math.abs(tempY[i] - tempYBlurred[i]);
                 }
-                const detailDensity = applyGaussianBlurY(tempYDiff, lw, lh, 2.0);
+                const detailDensity = applyBoxBlurY(tempYDiff, lw, lh, 2);
 
                 // -----------------------------------------------------------------
                 // STEP 1: Bilateral Filter (Denoise)
@@ -776,31 +776,63 @@ document.addEventListener('DOMContentLoaded', () => {
                     vChannel[idx] = 0.615 * r - 0.51499 * g - 0.10001 * b + 128;
                 }
 
-                // Pre-compute blurred color channels for color-sharpening
-                const uBlurred = applyGaussianBlurY(uChannel, lw, lh, 1.0);
-                const vBlurred = applyGaussianBlurY(vChannel, lw, lh, 1.0);
+                // Pre-compute blurred color channels for color-sharpening (box filter alternative)
+                const uBlurred = applyBoxBlurY(uChannel, lw, lh, 1);
+                const vBlurred = applyBoxBlurY(vChannel, lw, lh, 1);
  
-                // Fine Gaussian blur for luminance texture details
-                const yBlurredFine = applyGaussianBlurY(yChannel, lw, lh, 1.0);
+                // Fine box blur for luminance texture details
+                const yBlurredFine = applyBoxBlurY(yChannel, lw, lh, 1);
                 const ySharp = new Float32Array(lw * lh);
                 
-                // Very gentle single-scale luminance sharpening (just for soft grain texture)
+                // Gentle single-scale luminance sharpening with halo suppression
                 const sFine = 0.05 + (sharpenVal / 100) * 0.15;   // range 0.05 to 0.20
                 
-                for (let i = 0; i < yChannel.length; i++) {
-                    const diffFine = yChannel[i] - yBlurredFine[i];
-                    const absFine = Math.abs(diffFine);
-                    
-                    let Wd = detailDensity[i] / 4.0;
-                    Wd = Math.min(1.0, Math.max(0.0, Wd));
-                    
-                    // Noise coring: suppress small grain variations
-                    const cleanDiffFine = absFine < 2.0 ? 0 : diffFine * ((absFine - 2.0) / absFine);
-                    const localSFine = sFine * (0.15 + 0.85 * Wd);
-                    const modFine = absFine / (absFine + 3.0);
-                    const clampedFine = Math.max(-6, Math.min(6, cleanDiffFine));
-                    
-                    ySharp[i] = yChannel[i] + localSFine * modFine * clampedFine;
+                for (let y = 0; y < lh; y++) {
+                    const row = y * lw;
+                    for (let x = 0; x < lw; x++) {
+                        const i = row + x;
+                        
+                        // Compute local 3x3 min and max values to completely prevent overshoots/undershoots (halos)
+                        let localMin = yChannel[i];
+                        let localMax = yChannel[i];
+                        
+                        const startY = y > 0 ? y - 1 : 0;
+                        const endY = y < lh - 1 ? y + 1 : lh - 1;
+                        const startX = x > 0 ? x - 1 : 0;
+                        const endX = x < lw - 1 ? x + 1 : lw - 1;
+                        
+                        for (let ny = startY; ny <= endY; ny++) {
+                            const nRow = ny * lw;
+                            for (let nx = startX; nx <= endX; nx++) {
+                                const val = yChannel[nRow + nx];
+                                if (val < localMin) localMin = val;
+                                if (val > localMax) localMax = val;
+                            }
+                        }
+                        
+                        const diffFine = yChannel[i] - yBlurredFine[i];
+                        const absFine = Math.abs(diffFine);
+                        
+                        let Wd = detailDensity[i] / 4.0;
+                        Wd = Math.min(1.0, Math.max(0.0, Wd));
+                        
+                        // Noise coring: suppress small grain variations
+                        const cleanDiffFine = absFine < 2.0 ? 0 : diffFine * ((absFine - 2.0) / absFine);
+                        
+                        // Edge suppression: if local contrast range (localMax - localMin) is large, we are near a sharp step edge.
+                        // We suppress sharpening to 0 on strong edges to eliminate any white and dark outline artifacts.
+                        const range = localMax - localMin;
+                        const edgeSuppression = Math.max(0.0, 1.0 - (range / 30.0));
+                        
+                        const localSFine = sFine * (0.15 + 0.85 * Wd) * edgeSuppression;
+                        const modFine = absFine / (absFine + 3.0);
+                        const clampedFine = Math.max(-6, Math.min(6, cleanDiffFine));
+                        
+                        const sharpened = yChannel[i] + localSFine * modFine * clampedFine;
+                        
+                        // Clamp to the original local neighborhood min/max to mathematically guarantee no white/dark halo creation
+                        ySharp[i] = Math.max(localMin, Math.min(localMax, sharpened));
+                    }
                 }
 
                 // -----------------------------------------------------------------
@@ -1162,44 +1194,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return output;
     }
 
-    // Helper: 1D Gaussian horizontal & vertical blur passes
-    function applyGaussianBlurY(yChannel, w, h, sigma) {
+    // Helper: 1D Box blur horizontal & vertical passes (No Gaussian filters, halo-free alternative)
+    function applyBoxBlurY(yChannel, w, h, radius) {
         const output = new Float32Array(yChannel.length);
-        const radius = Math.ceil(2 * sigma);
-        const kernel = [];
-        let sum = 0;
-        
-        for (let i = -radius; i <= radius; i++) {
-            const g = Math.exp(-(i * i) / (2 * sigma * sigma));
-            kernel.push(g);
-            sum += g;
-        }
-        for (let i = 0; i < kernel.length; i++) {
-            kernel[i] /= sum;
-        }
+        const temp = new Float32Array(yChannel.length);
         
         // Horizontal pass
-        const temp = new Float32Array(yChannel.length);
         for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
-                let val = 0;
+                let sum = 0;
+                let count = 0;
                 for (let k = -radius; k <= radius; k++) {
-                    const nx = Math.min(w - 1, Math.max(0, x + k));
-                    val += yChannel[y * w + nx] * kernel[k + radius];
+                    const nx = x + k;
+                    if (nx >= 0 && nx < w) {
+                        sum += yChannel[rowOffset + nx];
+                        count++;
+                    }
                 }
-                temp[y * w + x] = val;
+                temp[rowOffset + x] = sum / count;
             }
         }
         
         // Vertical pass
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                let val = 0;
+        for (let x = 0; x < w; x++) {
+            for (let y = 0; y < h; y++) {
+                let sum = 0;
+                let count = 0;
                 for (let k = -radius; k <= radius; k++) {
-                    const ny = Math.min(h - 1, Math.max(0, y + k));
-                    val += temp[ny * w + x] * kernel[k + radius];
+                    const ny = y + k;
+                    if (ny >= 0 && ny < h) {
+                        sum += temp[ny * w + x];
+                        count++;
+                    }
                 }
-                output[y * w + x] = val;
+                output[y * w + x] = sum / count;
             }
         }
         
