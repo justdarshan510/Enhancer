@@ -953,17 +953,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     const uVal = uChannel[idx];
                     const vVal = vChannel[idx];
                     
-                    // 1. Shadows and Highlights recovery (Dynamic Range protection with black-point preservation)
+                    // 1. SHADOW LIFT — Log-tone-mapped recovery
+                    // Anchors at 0 (pure black stays black), peaks lift at ~25% luma
+                    // denoiseVal 0→100 controls strength: 0=gentle, 100=aggressive
                     let yNorm = yVal / 255;
-                    // Shadows recovery (lift dark values but anchor absolute black to 0 to keep contrast deep)
-                    if (yNorm < 0.35) {
-                        const shadowBoost = yNorm * (0.35 - yNorm) * 1.2 * (denoiseVal / 100);
-                        yNorm += shadowBoost;
+                    if (yNorm < 0.55) {
+                        // Log-curve shadow recovery: lift = k * yNorm * ln(1 + yNorm*scale) / ln(2)
+                        const shadowStrength = 0.10 + (denoiseVal / 100) * 0.22; // 0.10→0.32
+                        const shadowLift = shadowStrength * yNorm * Math.log(1 + (1 - yNorm) * 3.5) / Math.log(4.5);
+                        // Taper off as we approach midtones (smooth blend out at 0.55)
+                        const taperMask = Math.max(0, 1 - yNorm / 0.55);
+                        yNorm = Math.min(0.98, yNorm + shadowLift * taperMask);
                     }
-                    // Highlights preservation (gently pull back bright values to prevent clipping, keeping pure white at 1.0)
-                    if (yNorm > 0.75 && yNorm < 0.98) {
-                        const highlightCompress = (yNorm - 0.75) * (1.0 - yNorm) * 0.4;
-                        yNorm -= highlightCompress;
+
+                    // HIGHLIGHT ROLLOFF — smooth shoulder to prevent clipping
+                    // Gently compresses values above 0.80, keeps pure white at 1.0
+                    if (yNorm > 0.80) {
+                        const t = (yNorm - 0.80) / 0.20; // 0 at 0.80, 1 at 1.0
+                        const softShoulder = 1.0 - (1.0 - yNorm) * 0.0; // keep headroom
+                        // Smooth toe-in: compress bright but don't crush
+                        const compress = t * t * 0.04;
+                        yNorm = Math.max(yNorm - compress, 0.80 + (yNorm - 0.80) * 0.88);
                     }
                     
                     // 2. Pro-Level Dynamic S-curve Contrast (softer contrast curve)
