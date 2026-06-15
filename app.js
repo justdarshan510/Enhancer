@@ -780,39 +780,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 const uBlurred = applyGaussianBlurY(uChannel, lw, lh, 1.0);
                 const vBlurred = applyGaussianBlurY(vChannel, lw, lh, 1.0);
  
-                // Multi-scale Gaussian blurs for luminance texture
+                // Fine Gaussian blur for luminance texture details
                 const yBlurredFine = applyGaussianBlurY(yChannel, lw, lh, 1.0);
-                const yBlurredCoarse = applyGaussianBlurY(yChannel, lw, lh, 3.0);
                 const ySharp = new Float32Array(lw * lh);
                 
-                // Very gentle luminance sharpening (just for soft grain texture)
+                // Very gentle single-scale luminance sharpening (just for soft grain texture)
                 const sFine = 0.05 + (sharpenVal / 100) * 0.15;   // range 0.05 to 0.20
-                const sCoarse = 0.02 + (sharpenVal / 100) * 0.08; // range 0.02 to 0.10
                 
                 for (let i = 0; i < yChannel.length; i++) {
                     const diffFine = yChannel[i] - yBlurredFine[i];
-                    const diffCoarse = yChannel[i] - yBlurredCoarse[i];
-                    
                     const absFine = Math.abs(diffFine);
-                    const absCoarse = Math.abs(diffCoarse);
                     
                     let Wd = detailDensity[i] / 4.0;
                     Wd = Math.min(1.0, Math.max(0.0, Wd));
                     
-                    // Noise coring
+                    // Noise coring: suppress small grain variations
                     const cleanDiffFine = absFine < 2.0 ? 0 : diffFine * ((absFine - 2.0) / absFine);
-                    const cleanDiffCoarse = absCoarse < 1.5 ? 0 : diffCoarse * ((absCoarse - 1.5) / absCoarse);
-                    
                     const localSFine = sFine * (0.15 + 0.85 * Wd);
-                    const localSCoarse = sCoarse * (0.3 + 0.7 * Wd);
-                    
                     const modFine = absFine / (absFine + 3.0);
-                    const modCoarse = absCoarse / (absCoarse + 5.0);
-                    
                     const clampedFine = Math.max(-6, Math.min(6, cleanDiffFine));
-                    const clampedCoarse = Math.max(-4, Math.min(4, cleanDiffCoarse));
                     
-                    ySharp[i] = yChannel[i] + localSFine * modFine * clampedFine + localSCoarse * modCoarse * clampedCoarse;
+                    ySharp[i] = yChannel[i] + localSFine * modFine * clampedFine;
                 }
 
                 // -----------------------------------------------------------------
@@ -826,12 +814,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // -----------------------------------------------------------------
                 const yFinal = yClahe; 
 
-                // Convert back from YUV to RGB space with high-fidelity Orton bloom, skin-tone protection vibrance & warming
+                // Convert back from YUV to RGB space with skin-tone protection vibrance & warming
                 const lowResultData = lowCtx.createImageData(lw, lh);
                 const lowResultPixels = lowResultData.data;
                 
                 // Pre-compute parameters
-                const bloomAmount = 0.04 + (sharpenVal / 100) * 0.04; // Orton bloom strength 4% - 8% (linear mix)
                 const contrastStrength = 0.08 + (sharpenVal / 100) * 0.08; // Dynamic contrast blend 8% - 16%
                 const warmthShift = 0.05 + (sharpenVal / 100) * 0.05; // very subtle shift 0.05 to 0.10 units
                 
@@ -841,14 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const uVal = uChannel[idx];
                     const vVal = vChannel[idx];
                     
-                    // 1. Orton Bloom Glow: Soft linear blend of coarse-blurred Y onto sharp Y
-                    const sharpYNorm = yVal / 255;
-                    const blurYNorm = yBlurredCoarse[idx] / 255;
-                    
-                    const bloomY = (sharpYNorm + blurYNorm) * 0.5;
-                    yVal = ((1 - bloomAmount) * sharpYNorm + bloomAmount * bloomY) * 255;
-                    
-                    // 2. Shadows and Highlights recovery (Dynamic Range protection with black-point preservation)
+                    // 1. Shadows and Highlights recovery (Dynamic Range protection with black-point preservation)
                     let yNorm = yVal / 255;
                     // Shadows recovery (lift dark values but anchor absolute black to 0 to keep contrast deep)
                     if (yNorm < 0.35) {
@@ -861,21 +841,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         yNorm -= highlightCompress;
                     }
                     
-                    // 3. Pro-Level Dynamic S-curve Contrast (softer contrast curve)
+                    // 2. Pro-Level Dynamic S-curve Contrast (softer contrast curve)
                     const yContrast = yNorm < 0.5 ? 
                                       Math.pow(yNorm * 2, 1.15) / 2 : 
                                       1 - Math.pow((1 - yNorm) * 2, 1.15) / 2;
                     yNorm = (1 - contrastStrength) * yNorm + contrastStrength * yContrast;
                     yVal = yNorm * 255;
 
-                    // 4. Color (Chrominance) Sharpening in U/V channels
+                    // 3. Color (Chrominance) Sharpening in U/V channels
                     const uDiffOrig = uVal - uBlurred[idx];
                     const vDiffOrig = vVal - vBlurred[idx];
                     const colorSharpenFactor = 0.20 + (sharpenVal / 100) * 0.40; // range 0.20 to 0.60
                     const uSharpened = uVal + uDiffOrig * colorSharpenFactor;
                     const vSharpened = vVal + vDiffOrig * colorSharpenFactor;
 
-                    // 5. Skin-Tone Detection & Protection (U/V space)
+                    // 4. Skin-Tone Detection & Protection (U/V space)
                     const uDiff = uSharpened - 128;
                     const vDiff = vSharpened - 128;
                     
@@ -884,7 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const distVSkin = vDiff - 20;
                     const skinProximity = Math.exp(-(distUSkin * distUSkin + distVSkin * distVSkin) / 600); // 1.0 = skin, 0.0 = non-skin
                     
-                    // 6. High-fidelity Vibrance & Saturation (clamped to max 1.25)
+                    // 5. High-fidelity Vibrance & Saturation (clamped to max 1.25)
                     const chroma = Math.sqrt(uDiff * uDiff + vDiff * vDiff);
                     const vibranceBoost = 1.25 - 0.15 * (chroma / 128); // ranges from 1.25 to 1.10
                     let satFactor = vibranceBoost * (0.85 + (sharpenVal / 100) * 0.15); // range ~ 0.95 to 1.25
@@ -901,7 +881,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let uNew = uDiff * satFactor;
                     let vNew = vDiff * satFactor;
                     
-                    // 7. Color Temperature Tuning (Subtle warm glow)
+                    // 6. Color Temperature Tuning (Subtle warm glow)
                     uNew = uNew - warmthShift * 0.4;
                     vNew = vNew + warmthShift * 0.8;
                     
