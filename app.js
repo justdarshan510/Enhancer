@@ -873,27 +873,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 const uBlurred = applyBoxBlurY(uChannel, lw, lh, 1);
                 const vBlurred = applyBoxBlurY(vChannel, lw, lh, 1);
  
-                // Fine box blur for luminance texture details
-                const yBlurredFine = applyBoxBlurY(yChannel, lw, lh, 1);
+                // Dual-scale Unsharp Mask: fine (r=1) for texture detail, coarse (r=2) for edge pop
+                const yBlurredFine   = applyBoxBlurY(yChannel, lw, lh, 1);
+                const yBlurredCoarse = applyBoxBlurY(yChannel, lw, lh, 2);
                 const ySharp = new Float32Array(lw * lh);
-                
-                // Gentle single-scale luminance sharpening with halo suppression
-                const sFine = 0.05 + (sharpenVal / 100) * 0.15;   // range 0.05 to 0.20
-                
+
+                // Fine-detail strength 0.18→0.55; coarse-edge strength 0.08→0.28
+                const sFine   = 0.18 + (sharpenVal / 100) * 0.37;
+                const sCoarse = 0.08 + (sharpenVal / 100) * 0.20;
+
                 for (let y = 0; y < lh; y++) {
                     const row = y * lw;
                     for (let x = 0; x < lw; x++) {
                         const i = row + x;
-                        
-                        // Compute local 3x3 min and max values to completely prevent overshoots/undershoots (halos)
+
+                        // Local 3×3 min/max for halo-free clamping
                         let localMin = yChannel[i];
                         let localMax = yChannel[i];
-                        
                         const startY = y > 0 ? y - 1 : 0;
-                        const endY = y < lh - 1 ? y + 1 : lh - 1;
+                        const endY   = y < lh - 1 ? y + 1 : lh - 1;
                         const startX = x > 0 ? x - 1 : 0;
-                        const endX = x < lw - 1 ? x + 1 : lw - 1;
-                        
+                        const endX   = x < lw - 1 ? x + 1 : lw - 1;
                         for (let ny = startY; ny <= endY; ny++) {
                             const nRow = ny * lw;
                             for (let nx = startX; nx <= endX; nx++) {
@@ -902,28 +902,34 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (val > localMax) localMax = val;
                             }
                         }
-                        
-                        const diffFine = yChannel[i] - yBlurredFine[i];
-                        const absFine = Math.abs(diffFine);
-                        
+
                         let Wd = detailDensity[i] / 4.0;
                         Wd = Math.min(1.0, Math.max(0.0, Wd));
-                        
-                        // Noise coring: suppress small grain variations
-                        const cleanDiffFine = absFine < 2.0 ? 0 : diffFine * ((absFine - 2.0) / absFine);
-                        
-                        // Edge suppression: if local contrast range (localMax - localMin) is large, we are near a sharp step edge.
-                        // We suppress sharpening to 0 on strong edges to eliminate any white and dark outline artifacts.
+
+                        // Fine scale — textures, pores, fabric, hair
+                        const diffFine = yChannel[i] - yBlurredFine[i];
+                        const absFine  = Math.abs(diffFine);
+                        const coreFine = absFine < 1.5 ? 0 : diffFine * ((absFine - 1.5) / absFine);
+
+                        // Coarse scale — edges, silhouettes
+                        const diffCoarse = yChannel[i] - yBlurredCoarse[i];
+                        const absCoarse  = Math.abs(diffCoarse);
+                        const coreCoarse = absCoarse < 3.0 ? 0 : diffCoarse * ((absCoarse - 3.0) / absCoarse);
+
+                        // Edge-awareness: suppress over-sharpening on very high-contrast edges
                         const range = localMax - localMin;
-                        const edgeSuppression = Math.max(0.0, 1.0 - (range / 30.0));
-                        
-                        const localSFine = sFine * (0.15 + 0.85 * Wd) * edgeSuppression;
-                        const modFine = absFine / (absFine + 3.0);
-                        const clampedFine = Math.max(-6, Math.min(6, cleanDiffFine));
-                        
-                        const sharpened = yChannel[i] + localSFine * modFine * clampedFine;
-                        
-                        // Clamp to the original local neighborhood min/max to mathematically guarantee no white/dark halo creation
+                        const edgeSup = Math.max(0.0, 1.0 - range / 48.0);
+
+                        const localSFine   = sFine   * (0.20 + 0.80 * Wd) * edgeSup;
+                        const localSCoarse = sCoarse * (0.30 + 0.70 * Wd) * edgeSup;
+
+                        const modFine   = absFine   / (absFine   + 2.5);
+                        const modCoarse = absCoarse / (absCoarse + 5.0);
+
+                        const sharpened = yChannel[i]
+                            + localSFine   * modFine   * Math.max(-8, Math.min(8, coreFine))
+                            + localSCoarse * modCoarse * Math.max(-12, Math.min(12, coreCoarse));
+
                         ySharp[i] = Math.max(localMin, Math.min(localMax, sharpened));
                     }
                 }
@@ -931,7 +937,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // -----------------------------------------------------------------
                 // STEP 3: CLAHE Contrast Enhancement
                 // -----------------------------------------------------------------
-                const clipLimit = 1.0 + (sharpenVal / 100) * 0.3; // range 1.0 to 1.3 (gentle local contrast enhancement)
+                // Higher clip limit = stronger midtone clarity and micro-contrast
+                const clipLimit = 1.4 + (sharpenVal / 100) * 0.80; // range 1.4→2.2 — real Lightroom Clarity territory
                 const yClahe = applyCLAHE(ySharp, lw, lh, 8, 8, clipLimit);
 
                 // -----------------------------------------------------------------
@@ -999,26 +1006,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     const distVSkin = vDiff - 20;
                     const skinProximity = Math.exp(-(distUSkin * distUSkin + distVSkin * distVSkin) / 600); // 1.0 = skin, 0.0 = non-skin
                     
-                    // 5. High-fidelity Vibrance & Saturation (clamped to max 1.25)
+                    // 5. Lightroom-style Vibrance + Saturation
+                    // Vibrance: boosts low-saturation colours more, protects already-vivid ones
                     const chroma = Math.sqrt(uDiff * uDiff + vDiff * vDiff);
-                    const vibranceBoost = 1.25 - 0.15 * (chroma / 128); // ranges from 1.25 to 1.10
-                    let satFactor = vibranceBoost * (0.85 + (sharpenVal / 100) * 0.15); // range ~ 0.95 to 1.25
-                    
-                    // Clamp saturation factor to avoid extreme color pop
-                    satFactor = Math.max(0.90, Math.min(1.25, satFactor));
-                    
-                    // Prevent skin tones from becoming over-saturated or sunburned/orange
+                    const chromaNorm = chroma / 128; // 0=grey, 1=fully saturated
+                    // Vibrance factor peaks on desaturated pixels, tapers on already-vivid ones
+                    const vibranceFactor = 1.0 + (0.55 - chromaNorm * 0.40) * (sharpenVal / 100);
+                    // Flat global saturation lift on top
+                    const satGlobal = 1.08 + (sharpenVal / 100) * 0.18; // 1.08→1.26
+                    let satFactor = vibranceFactor * satGlobal;
+
+                    // Hard cap to avoid neon oversaturation
+                    satFactor = Math.max(0.95, Math.min(1.55, satFactor));
+
+                    // Skin-tone protection: cap at 1.12 regardless of slider
                     if (skinProximity > 0.1) {
-                        const skinSatTarget = 1.02 + (sharpenVal / 100) * 0.08; // max 1.10 for skin tones
-                        satFactor = (1 - skinProximity) * satFactor + skinProximity * skinSatTarget;
+                        const skinSatCap = 1.04 + (sharpenVal / 100) * 0.08; // 1.04→1.12
+                        satFactor = (1 - skinProximity) * satFactor + skinProximity * Math.min(satFactor, skinSatCap);
                     }
-                    
+
                     let uNew = uDiff * satFactor;
                     let vNew = vDiff * satFactor;
-                    
-                    // 6. Color Temperature Tuning (Subtle warm glow)
-                    uNew = uNew - warmthShift * 0.4;
-                    vNew = vNew + warmthShift * 0.8;
+
+                    // 6. Color Temperature — warmer midtones, cooler shadows
+                    // Apply less shift in shadows (low yNorm) to keep black integrity
+                    const tempMask = Math.min(1.0, yNorm / 0.3); // 0 at black, 1 at mid+
+                    uNew = uNew - warmthShift * 0.5 * tempMask;
+                    vNew = vNew + warmthShift * 1.0 * tempMask;
                     
                     // Reconstruct RGB channels
                     let r = yVal + 1.13983 * vNew;
@@ -1031,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Brilliance+14, Sharpen+11, Clarity+55, Highlight+11,
                     // Shadow+0, White-7, Black-4, Temp+5, Hue-6
                     // -----------------------------------------------------------------
-                    const goIntensity = 0.60; // 60% blend
+                    const goIntensity = 0.72; // 72% blend — stronger cinematic signature
 
                     // Normalise to 0-1
                     let rn = r / 255;
@@ -1123,15 +1137,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Shadow teal mask: strong in darks, fades to 0 by mid-tone
                     const shadowMask = Math.max(0, 1 - lumSplit / 0.45);
                     const shadowMaskSq = shadowMask * shadowMask;
-                    rn -= 0.018 * shadowMaskSq;  // remove red from shadows
-                    gn += 0.014 * shadowMaskSq;  // add green to shadows
-                    bn += 0.025 * shadowMaskSq;  // add blue to shadows → teal
-                    // Highlight orange mask: strong in brights, fades to 0 by mid-tone
-                    const highlightMask = Math.max(0, (lumSplit - 0.55) / 0.45);
+                    rn -= 0.026 * shadowMaskSq;  // teal shadows: pull red down
+                    gn += 0.018 * shadowMaskSq;  // teal shadows: lift green slightly
+                    bn += 0.034 * shadowMaskSq;  // teal shadows: push blue up
+                    // Highlight orange mask
+                    const highlightMask = Math.max(0, (lumSplit - 0.52) / 0.48);
                     const highlightMaskSq = highlightMask * highlightMask;
-                    rn += 0.030 * highlightMaskSq; // add red to highlights → orange
-                    gn += 0.008 * highlightMaskSq; // small green to keep warm
-                    bn -= 0.020 * highlightMaskSq; // remove blue from highlights
+                    rn += 0.040 * highlightMaskSq; // orange highlights: red lift
+                    gn += 0.010 * highlightMaskSq; // orange highlights: warm green
+                    bn -= 0.028 * highlightMaskSq; // orange highlights: remove blue
 
                     // Blend grade at goIntensity (60%) over the ungraded RGB
                     const rGraded = rn * 255;
