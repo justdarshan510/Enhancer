@@ -6,14 +6,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --bg-color: #3D441E;
-    --card-bg: rgba(20, 20, 20, 0.45);
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-hover: rgba(255, 255, 255, 0.25);
-    --glow-color: rgba(255, 255, 255, 0.15);
-    --accent-glow: rgba(0, 180, 255, 0.3);
+    --bg-color: #DEAF84;
+    --card-bg: rgba(22, 12, 4, 0.48);
+    --border-color: rgba(0, 0, 0, 0.12);
+    --border-hover: rgba(0, 0, 0, 0.30);
+    --glow-color: rgba(0, 0, 0, 0.10);
+    --accent-glow: rgba(0, 140, 255, 0.25);
     --text-primary: #ffffff;
-    --text-secondary: #a1a1a6;
+    --text-secondary: rgba(255, 255, 255, 0.60);
     --accent-color: #00b4ff;
     --font-heading: 'Outfit', sans-serif;
     --font-body: 'Inter', sans-serif;
