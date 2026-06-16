@@ -1,4 +1,4 @@
-# Radika Photo Enhancer
+# Photo Enhancer
 
 A browser-based image enhancement engine that reconstructs low-resolution photographs into high-fidelity, professionally polished output — entirely client-side, with no data uploaded to any server.
 
@@ -6,7 +6,7 @@ A browser-based image enhancement engine that reconstructs low-resolution photog
 
 ## What It Does
 
-Radika applies a multi-stage computational pipeline to any photograph dropped into the interface. The result is a sharper, more detailed, cinematically graded version of the original — processed in seconds using your device's own hardware.
+A multi-stage computational pipeline is applied to any photograph dropped into the interface. The result is a sharper, more detailed, cinematically graded version of the original — processed in seconds using your device's own hardware.
 
 **Core capabilities**
 
@@ -83,4 +83,4 @@ The project is configured for zero-configuration deployment on Vercel. Push to `
 
 ---
 
-*Radika — clarity from noise.*
+*Clarity from noise.*
