@@ -393,7 +393,11 @@ h1.hero-title {
     width: 200px;
     height: 280px;
     transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
     transition: transform 0.1s ease;
+    /* Force GPU layer — eliminates flicker on mobile */
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 .carousel-card {
@@ -406,10 +410,14 @@ h1.hero-title {
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: var(--card-bg);
-    backdrop-filter: blur(10px);
+    /* backdrop-filter is GPU-expensive on mobile — removed to prevent flicker */
     box-shadow: 0 20px 40px rgba(0,0,0,0.5);
     transform-style: preserve-3d;
-    backface-visibility: visible;
+    -webkit-transform-style: preserve-3d;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* GPU compositing — key fix for mobile flicker */
+    will-change: transform;
     transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     cursor: pointer;
 }
@@ -991,10 +999,28 @@ h1.hero-title {
 .mobile-only { display: none; }
 body.is-mobile .mobile-only { display: block; }
 
-/* Hide desktop-specific elements on mobile (without affecting desktop layout) */
-body.is-mobile .carousel-container { display: none !important; }
+/* On mobile: keep the 3D carousel visible, hide only the desktop side panel */
 body.is-mobile .card-details-panel { display: none !important; }
 body.is-mobile .app-container      { display: none !important; }
+
+/* Mobile 3D carousel — compact size to fit narrow screens */
+body.is-mobile .carousel-container {
+    height: 300px;
+    perspective: 800px;
+}
+
+body.is-mobile .carousel-dome {
+    width: 140px;
+    height: 200px;
+}
+
+body.is-mobile .carousel-card {
+    width: 140px;
+    height: 200px;
+    border-radius: 14px;
+    /* Disable heavy transitions on mobile touch for smoother feel */
+    transition: opacity 0.4s ease, box-shadow 0.4s ease;
+}
 
 /* ============================================================
    MOBILE UI SYSTEM

@@ -308,7 +308,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         carouselDome.innerHTML = '';
         const N = cardsData.length;
-        const radius = 280; // distance from center of rotation
+        // Smaller radius on mobile so cards stay within narrow screen
+        const radius = isMobile ? 160 : 280;
 
         cardsData.forEach((card, index) => {
             const angle = (360 / N) * index;
@@ -316,7 +317,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cardEl.className = 'carousel-card';
             cardEl.dataset.index = index;
             
-            // Positioning card around cylinder rotation
             cardEl.style.transform = `rotateY(${angle}deg) translateZ(${radius}px)`;
             
             cardEl.innerHTML = `
@@ -327,12 +327,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
-            // Click handler for focusing
             cardEl.addEventListener('click', (e) => {
-                // If clicking an already focused card, do nothing
                 if (cardEl.classList.contains('focused')) return;
-                
-                // Stop dragging propagation
                 e.stopPropagation();
                 focusCard(index);
             });
@@ -340,73 +336,76 @@ document.addEventListener('DOMContentLoaded', () => {
             carouselDome.appendChild(cardEl);
         });
 
-        // Set initial transform
         updateCarouselTransform();
-        
-        // Start auto-rotation animation
         startAutoRotation();
     }
 
     function updateCarouselTransform() {
-        if (activeCardIndex !== null) return; // Don't rotate while focused
+        if (activeCardIndex !== null) return;
         carouselDome.style.transform = `rotateY(${rotationY}deg)`;
     }
 
-    // Auto-rotation when idle
+    // ─── requestAnimationFrame-based rotation (replaces setInterval) ──────────
+    // setInterval drifts and causes flicker on mobile — rAF is frame-synced
+    let rafId = null;
+
     function startAutoRotation() {
-        if (autoRotateInterval) clearInterval(autoRotateInterval);
-        autoRotateInterval = setInterval(() => {
+        if (rafId) cancelAnimationFrame(rafId);
+
+        function tick() {
             if (!isDragging && activeCardIndex === null) {
                 rotationY += velocityY;
                 updateCarouselTransform();
             }
-        }, 16); // ~60fps
+            rafId = requestAnimationFrame(tick);
+        }
+        rafId = requestAnimationFrame(tick);
     }
 
-    // Drag to rotate logic
+    function stopAutoRotation() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // Drag to rotate — mouse
     carouselContainer.addEventListener('mousedown', (e) => {
         if (activeCardIndex !== null) return;
         isDragging = true;
         startX = e.clientX;
-        clearInterval(autoRotateInterval);
     });
 
     window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
         const deltaX = e.clientX - startX;
-        rotationY += deltaX * 0.15; // drag sensitivity
+        rotationY += deltaX * 0.15;
         startX = e.clientX;
         updateCarouselTransform();
     });
 
     window.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            startAutoRotation();
-        }
+        isDragging = false;
     });
 
-    // Touch support for mobile
+    // Drag to rotate — touch (mobile)
     carouselContainer.addEventListener('touchstart', (e) => {
         if (activeCardIndex !== null) return;
         isDragging = true;
         startX = e.touches[0].clientX;
-        clearInterval(autoRotateInterval);
-    });
+    }, { passive: true });
 
     window.addEventListener('touchmove', (e) => {
         if (!isDragging) return;
         const deltaX = e.touches[0].clientX - startX;
-        rotationY += deltaX * 0.15;
+        rotationY += deltaX * 0.2; // slightly higher sensitivity on touch
         startX = e.touches[0].clientX;
         updateCarouselTransform();
-    });
+    }, { passive: true });
 
     window.addEventListener('touchend', () => {
-        if (isDragging) {
-            isDragging = false;
-            startAutoRotation();
-        }
+        isDragging = false;
     });
 
     // 2. Focus Card Detail Panel
@@ -1802,17 +1801,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // MOBILE UI INITIALIZATION
-    // All mobile-specific logic is guarded by isMobile check
+    // INITIALIZATION — 3D carousel runs on ALL devices
+    // Mobile additionally gets the enhancer bottom-sheet
     // ═══════════════════════════════════════════════════════════
     const isMobile = document.body.classList.contains('is-mobile');
 
+    // Always init the 3D carousel (mobile uses smaller radius via isMobile flag)
+    initCarousel();
+
     if (isMobile) {
-        initMobileGallery();
         initMobileEnhancer();
-    } else {
-        // Run Initializations (desktop)
-        initCarousel();
     }
 
     // ─── Mobile Gallery (swipe cards replacing 3D carousel) ───────────────────
