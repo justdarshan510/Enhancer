@@ -21,6 +21,15 @@
 }
 
 /* Base Styles */
+html {
+    overflow-x: hidden;
+    overflow-y: scroll;
+    width: 100%;
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;   /* IE/Edge */
+}
+html::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -34,6 +43,8 @@ body {
     color: var(--text-primary);
     font-family: var(--font-body);
     overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
     position: relative;
     min-height: 100vh;
 }
@@ -257,6 +268,10 @@ nav a:hover, nav a.active {
 /* Hero Section */
 .hero-section {
     min-height: 100vh;
+    width: 100%;
+    max-width: 100vw;
+    /* clip-path clips 3D-transformed children — overflow:hidden does NOT */
+    clip-path: inset(0);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -357,6 +372,7 @@ h1.hero-title {
 .carousel-container {
     perspective: 1200px;
     width: 100%;
+    max-width: 100%;
     height: 380px;
     display: flex;
     justify-content: center;
@@ -365,6 +381,7 @@ h1.hero-title {
     margin-top: 20px;
     cursor: grab;
     user-select: none;
+    /* overflow:hidden does NOT clip preserve-3d children — clip-path on hero handles it */
 }
 
 .carousel-container:active {
@@ -960,19 +977,426 @@ h1.hero-title {
     opacity: 1;
 }
 
-/* Responsive queries */
-@media (max-width: 900px) {
+/* ============================================================
+   DEVICE DETECTION SYSTEM
+   JS adds body.is-mobile or body.is-desktop class on load
+   
+   STRATEGY: Desktop CSS is completely untouched.
+   Mobile-only elements are hidden by default (display:none)
+   and shown only when body.is-mobile is active.
+   Desktop-specific elements are hidden on mobile via targeted rules.
+   ============================================================ */
+
+/* Mobile-only elements: hidden by default, shown on mobile */
+.mobile-only { display: none; }
+body.is-mobile .mobile-only { display: block; }
+
+/* Hide desktop-specific elements on mobile (without affecting desktop layout) */
+body.is-mobile .carousel-container { display: none !important; }
+body.is-mobile .card-details-panel { display: none !important; }
+body.is-mobile .app-container      { display: none !important; }
+
+/* ============================================================
+   MOBILE UI SYSTEM
+   Full independent layout for phones (< 768px touch devices)
+   ============================================================ */
+
+/* -- Mobile Hero -- */
+body.is-mobile .hero-section {
+    padding-top: 80px;
+    padding-left: 20px;
+    padding-right: 20px;
+    min-height: 100dvh;
+    align-items: flex-start;
+    overflow-x: hidden;
+}
+
+body.is-mobile h1.hero-title {
+    font-size: 36px;
+    letter-spacing: -0.8px;
+    text-align: left;
+    max-width: 100%;
+    line-height: 1.2;
+}
+
+body.is-mobile .hero-subtitle {
+    font-size: 13px;
+    text-align: left;
+    max-width: 100%;
+}
+
+body.is-mobile .badge {
+    margin-bottom: 18px;
+}
+
+body.is-mobile .hero-actions {
+    margin-bottom: 28px;
+}
+
+body.is-mobile .btn-primary,
+body.is-mobile .btn-secondary {
+    padding: 13px 24px;
+    font-size: 14px;
+}
+
+/* -- Mobile Card Swipe Gallery -- */
+.mobile-gallery {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.mobile-gallery-track {
+    display: flex;
+    gap: 16px;
+    padding: 8px 20px 8px 20px;
+    overflow-x: scroll;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    cursor: grab;
+    transition: transform 0.05s linear;
+}
+
+.mobile-gallery-track::-webkit-scrollbar { display: none; }
+.mobile-gallery-track:active { cursor: grabbing; }
+
+.mobile-card {
+    flex: 0 0 200px;
+    height: 280px;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card-bg);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+    scroll-snap-align: start;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.3s ease;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-card:active {
+    transform: scale(0.96);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+}
+
+.mobile-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: grayscale(60%) contrast(1.05) brightness(0.85);
+    transition: filter 0.4s ease;
+}
+
+.mobile-card.selected img {
+    filter: grayscale(0%) contrast(1) brightness(1);
+}
+
+.mobile-card-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 20px 16px 16px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+}
+
+.mobile-card-category {
+    font-size: 10px;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.mobile-card-title {
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-weight: 500;
+    color: #fff;
+}
+
+/* Pill dots indicator */
+.mobile-gallery-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.mobile-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    transition: all 0.3s ease;
+}
+
+.mobile-dot.active {
+    width: 18px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.85);
+}
+
+/* Mobile CTA after gallery */
+.mobile-gallery-cta {
+    padding: 0 20px;
+    margin-top: 16px;
+}
+
+.mobile-gallery-cta p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+/* -- Mobile Enhancer (Bottom Sheet) -- */
+body.is-mobile .enhancer-section {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100dvh;
+    z-index: 200;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transform: translateY(0);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+
+body.is-mobile .enhancer-section.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Full-screen image preview area */
+.mobile-preview-area {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+/* Mobile bottom sheet panel */
+.mobile-sheet {
+    background: rgba(14, 10, 6, 0.96);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px 24px 0 0;
+    padding: 12px 20px 32px;
+    position: relative;
+    z-index: 10;
+    max-height: 65dvh;
+    overflow-y: auto;
+    scrollbar-width: none;
+    box-shadow: 0 -20px 60px rgba(0,0,0,0.6);
+    transform: translateY(100%);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: none;
+}
+
+body.is-mobile .enhancer-section.visible .mobile-sheet {
+    transform: translateY(0);
+}
+
+body.is-mobile .enhancer-section.visible .mobile-preview-area {
+    animation: mPreviewFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mPreviewFadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+}
+
+.mobile-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.mobile-sheet-title {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.mobile-sheet-close {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 16px;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-sheet-close:active {
+    background: rgba(255,255,255,0.16);
+    transform: scale(0.9);
+}
+
+/* Mobile workspace — full viewport image slider */
+.mobile-preview-area .slider-wrapper {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+}
+
+.mobile-preview-area .slider-badge {
+    top: 60px;
+}
+
+.mobile-preview-area .dropzone {
+    width: calc(100% - 40px);
+    height: 200px;
+    border-radius: 20px;
+    margin: 0 auto;
+}
+
+.mobile-preview-area .processing-container {
+    text-align: center;
+}
+
+.mobile-preview-area .processing-console {
+    width: calc(100% - 40px);
+    max-width: 360px;
+    height: 100px;
+    font-size: 10px;
+}
+
+/* Mobile parameter sliders */
+.mobile-params {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+/* View mode toggle on mobile */
+body.is-mobile .view-mode-toggle {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+}
+
+/* Mobile side-by-side stacked vertically */
+body.is-mobile .side-by-side-container {
+    flex-direction: column;
+    gap: 0;
+    padding: 50px 0 0;
+    height: 100%;
+}
+
+body.is-mobile .comparison-card {
+    max-width: 100%;
+    width: 100%;
+    height: 50%;
+    flex: 1;
+}
+
+body.is-mobile .comparison-arrow {
+    display: none;
+}
+
+/* Mobile action buttons row */
+.mobile-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.mobile-actions .btn-primary,
+.mobile-actions .btn-secondary {
+    width: 100%;
+    padding: 13px 10px;
+    font-size: 13px;
+    text-align: center;
+}
+
+.mobile-actions .btn-full {
+    grid-column: 1 / -1;
+}
+
+/* Mobile mode selector — compact pill */
+.mobile-mode-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.mobile-mode-pill {
+    flex: 1;
+    min-width: 90px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-body);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-mode-pill.active {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+    font-weight: 500;
+}
+
+.mobile-mode-pill:active {
+    transform: scale(0.96);
+}
+
+/* Mobile header */
+body.is-mobile header {
+    padding: 16px 20px;
+    justify-content: space-between;
+}
+
+/* -- Desktop fallback responsive (non-touch tablets) -- */
+@media (max-width: 900px) and (hover: hover) {
     header {
         padding: 20px 24px;
     }
-    nav {
-        display: none; /* simple burger implementation for mobile later if needed */
-    }
-    .menu-toggle {
-        display: flex;
-    }
     h1.hero-title {
-        font-size: 48px;
+        font-size: 40px;
     }
     .app-container {
         flex-direction: column;
@@ -989,11 +1413,9 @@ h1.hero-title {
         height: 450px;
         padding: 24px;
     }
-    .slider-badge {
-        top: 16px;
-    }
+    .slider-badge { top: 16px; }
     .slider-badge.before-badge { left: 16px; }
-    .slider-badge.after-badge { right: 16px; }
+    .slider-badge.after-badge  { right: 16px; }
 }
 
 /* AI Toggle Switch & Input Styling */

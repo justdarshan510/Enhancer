@@ -24,7 +24,6 @@
 
     <!-- Main Hero Landing Screen with 3D Carousel -->
     <main class="hero-section" id="hero-section">
-        <div class="badge">The Best Style</div>
         <h1 class="hero-title">Capturing Moments,<br>Crafting Stories</h1>
         <p class="hero-subtitle">Discover The Art Of Photography Through Unique Perspectives And Timeless Imagery, Or Transform Your Photos With Our 4K Upscaling App.</p>
         
@@ -32,7 +31,7 @@
             <button class="btn-primary" id="btn-try-app">Upscale Images</button>
         </div>
 
-        <!-- 3D Carousel Dome container -->
+        <!-- 3D Carousel Dome container (Desktop) -->
         <div class="carousel-container">
             <div class="carousel-dome">
                 <!-- Javascript will inject 3D cards here -->
@@ -45,7 +44,7 @@
             </div>
         </div>
 
-        <!-- Floating Card Details Panel -->
+        <!-- Floating Card Details Panel (Desktop) -->
         <div class="card-details-panel">
             <h3 class="details-title">Elegance In Boldness</h3>
             <p class="details-desc">This photo was captured in a controlled studio environment, using sharp lighting to emphasize contrast and texture.</p>
@@ -59,10 +58,28 @@
                 <button class="details-close" id="btn-details-close">Close</button>
             </div>
         </div>
+
+        <!-- MOBILE: Swipe Card Gallery (replaces 3D carousel) -->
+        <div class="mobile-gallery mobile-only" id="mobile-gallery">
+            <div class="mobile-gallery-track" id="mobile-gallery-track">
+                <!-- Cards injected by JS -->
+            </div>
+            <div class="mobile-gallery-dots" id="mobile-gallery-dots">
+                <!-- Dots injected by JS -->
+            </div>
+        </div>
+
+        <!-- MOBILE: CTA below gallery -->
+        <div class="mobile-gallery-cta mobile-only">
+            <p>Tap a photo to preview · Swipe to explore</p>
+            <button class="btn-primary" id="btn-try-app-mobile" style="width:100%;">Upload &amp; Upscale Your Photo</button>
+        </div>
     </main>
 
     <!-- Photo Enhancer Interactive App Panel -->
     <section class="enhancer-section" id="enhancer-section">
+
+        <!-- ===================== DESKTOP UI ===================== -->
         <div class="app-container">
             
             <!-- Left panel control controls -->
@@ -81,7 +98,7 @@
                         </div>
                         <div class="parameter-item">
                             <div class="parameter-label">
-                                <span>Denoise & Details</span>
+                                <span>Denoise &amp; Details</span>
                                 <span class="parameter-value" id="slider-denoise-val">90%</span>
                             </div>
                             <input type="range" class="parameter-slider" id="slider-denoise" min="10" max="100" value="90">
@@ -145,7 +162,7 @@
                         </svg>
                     </div>
                     <div class="dropzone-text">Upload image to upscale</div>
-                    <div class="dropzone-sub">Drag & drop your photo, or click to browse. Supports JPG, PNG. Max size 25MB.</div>
+                    <div class="dropzone-sub">Drag &amp; drop your photo, or click to browse. Supports JPG, PNG. Max size 25MB.</div>
                     <div class="dropzone-formats">
                         <span class="format-badge">JPG</span>
                         <span class="format-badge">PNG</span>
@@ -220,7 +237,112 @@
 
             </div>
 
+        </div><!-- end .app-container -->
+
+        <!-- ===================== MOBILE UI ===================== -->
+        <!-- Full-viewport image preview (behind the sheet) -->
+        <div class="mobile-preview-area mobile-only" id="mobile-preview-area">
+            <!-- View toggle -->
+            <div class="view-mode-toggle" id="mobile-view-mode-toggle" style="display:none;">
+                <button class="btn-toggle active" id="mobile-btn-view-slider">Split</button>
+                <button class="btn-toggle" id="mobile-btn-view-side">Side-by-Side</button>
+            </div>
+
+            <!-- Upload zone -->
+            <div class="dropzone" id="mobile-dropzone">
+                <div class="dropzone-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 15V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="dropzone-text" style="font-size:15px;">Tap to upload photo</div>
+                <div class="dropzone-sub" style="font-size:12px;">JPG, PNG, WEBP · Max 25MB</div>
+                <input type="file" id="mobile-file-input" accept="image/*" style="display: none;">
+            </div>
+
+            <!-- Processing -->
+            <div class="processing-container" id="mobile-processing-container">
+                <svg class="spinner-svg" viewBox="0 0 100 100" fill="none" style="width:70px;height:70px;">
+                    <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.05)" stroke-width="4"/>
+                    <circle class="spinner-circle" cx="50" cy="50" r="45" stroke="white" stroke-width="4"/>
+                </svg>
+                <div class="processing-console" id="mobile-console-logs" style="width:calc(100% - 40px);max-width:340px;height:90px;font-size:10px;"></div>
+            </div>
+
+            <!-- Split slider view -->
+            <div class="slider-view-container" id="mobile-slider-view-container">
+                <div class="slider-wrapper" id="mobile-slider-wrapper">
+                    <img id="mobile-before-img" class="slider-img before" src="assets/demo.png" alt="Original">
+                    <img id="mobile-after-img" class="slider-img after" src="assets/demo.png" alt="4K Enhanced">
+                    <div class="slider-badge before-badge" style="top:70px;">Original</div>
+                    <div class="slider-badge after-badge" style="top:70px;">4K Enhanced</div>
+                    <div class="slider-handle" id="mobile-slider-handle">
+                        <div class="slider-handle-button">
+                            <svg viewBox="0 0 24 24"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side-by-side view -->
+            <div class="side-by-side-container" id="mobile-side-by-side-container" style="display:none;">
+                <div class="comparison-card before-card">
+                    <div class="card-image-wrapper">
+                        <img id="mobile-side-before-img" src="assets/demo.png" alt="Before">
+                    </div>
+                    <div class="card-label before-label">BEFORE</div>
+                </div>
+                <div class="comparison-card after-card">
+                    <div class="card-image-wrapper">
+                        <img id="mobile-side-after-img" src="assets/demo.png" alt="After">
+                    </div>
+                    <div class="card-label after-label">AFTER</div>
+                </div>
+            </div>
         </div>
+
+        <!-- Slide-up bottom sheet with controls -->
+        <div class="mobile-sheet mobile-only" id="mobile-sheet">
+            <div class="sheet-handle"></div>
+            <div class="mobile-sheet-header">
+                <span class="mobile-sheet-title">Neural Enhancer</span>
+                <div class="mobile-sheet-close" id="mobile-btn-close-enhancer">✕</div>
+            </div>
+
+            <!-- Mode pills -->
+            <div class="mobile-mode-row">
+                <button class="mobile-mode-pill active" data-mode="canvas">⚡ Instant</button>
+                <button class="mobile-mode-pill" data-mode="replicate">☁️ Cloud AI</button>
+                <button class="mobile-mode-pill" data-mode="modal">🖥️ GPU</button>
+            </div>
+
+            <!-- Sliders -->
+            <div class="mobile-params">
+                <div class="parameter-item">
+                    <div class="parameter-label">
+                        <span>Enhance Strength</span>
+                        <span class="parameter-value" id="mobile-slider-enhance-val">85%</span>
+                    </div>
+                    <input type="range" class="parameter-slider" id="mobile-slider-enhance" min="10" max="100" value="85">
+                </div>
+                <div class="parameter-item">
+                    <div class="parameter-label">
+                        <span>Denoise &amp; Details</span>
+                        <span class="parameter-value" id="mobile-slider-denoise-val">90%</span>
+                    </div>
+                    <input type="range" class="parameter-slider" id="mobile-slider-denoise" min="10" max="100" value="90">
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="mobile-actions">
+                <button class="btn-primary" id="mobile-btn-download">Download 4K</button>
+                <button class="btn-secondary" id="mobile-btn-upscale-another">New Image</button>
+                <button class="btn-secondary btn-full" id="mobile-btn-back" style="border-color:transparent;background:none;font-size:12px;padding:10px;">← Back to Showroom</button>
+            </div>
+        </div>
+
     </section>
 
     <!-- Global Toast Alerts -->

@@ -1,5 +1,46 @@
 // APPLICATION LOGIC - Enhancer 3D Photo Enhancer
 
+// ═══════════════════════════════════════════════════════════
+// DEVICE DETECTION — runs before DOMContentLoaded
+// Determines mobile vs desktop and sets body class accordingly
+// Criteria: touch device AND narrow screen (< 1024px) OR
+//           explicit mobile user-agent string
+// ═══════════════════════════════════════════════════════════
+(function detectDevice() {
+    const hasTouchScreen = (
+        ('ontouchstart' in window) ||
+        (navigator.maxTouchPoints > 0) ||
+        (navigator.msMaxTouchPoints > 0)
+    );
+    const isNarrow = window.innerWidth < 1024;
+    const mobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(navigator.userAgent);
+
+    const isMobileDevice = (hasTouchScreen && isNarrow) || mobileUA;
+
+    if (isMobileDevice) {
+        document.body.classList.add('is-mobile');
+        document.documentElement.setAttribute('data-device', 'mobile');
+    } else {
+        document.body.classList.add('is-desktop');
+        document.documentElement.setAttribute('data-device', 'desktop');
+    }
+
+    // Also re-evaluate on resize (e.g. DevTools toggle)
+    window.addEventListener('resize', () => {
+        const nowNarrow = window.innerWidth < 1024;
+        const nowTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if ((nowNarrow && nowTouch) || mobileUA) {
+            document.body.classList.add('is-mobile');
+            document.body.classList.remove('is-desktop');
+            document.documentElement.setAttribute('data-device', 'mobile');
+        } else {
+            document.body.classList.add('is-desktop');
+            document.body.classList.remove('is-mobile');
+            document.documentElement.setAttribute('data-device', 'desktop');
+        }
+    });
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
     // State management
     let isDragging = false;
@@ -454,52 +495,57 @@ document.addEventListener('DOMContentLoaded', () => {
         heroSection.classList.remove('hidden');
     }
 
-    btnTryApp.addEventListener('click', () => showEnhancerSection());
-    btnCloseEnhancer.addEventListener('click', hideEnhancerSection);
-    
-    // Clicking focused card "Enhance"
-    btnEnhanceCard.addEventListener('click', () => {
-        if (activeCardIndex !== null) {
-            const cardImgSrc = cardsData[activeCardIndex].image;
-            showEnhancerSection(cardImgSrc);
-        }
-    });
+    // Desktop-only navigation listeners (mobile has its own handlers below)
+    const _isMobileNow = document.body.classList.contains('is-mobile');
+    if (!_isMobileNow) {
+        btnTryApp.addEventListener('click', () => showEnhancerSection());
+        btnCloseEnhancer.addEventListener('click', hideEnhancerSection);
+        
+        // Clicking focused card "Enhance"
+        btnEnhanceCard?.addEventListener('click', () => {
+            if (activeCardIndex !== null) {
+                const cardImgSrc = cardsData[activeCardIndex].image;
+                showEnhancerSection(cardImgSrc);
+            }
+        });
+    }
 
-    // 4. File Drop & Reader
-    // Drag/drop behaviors
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            dropzone.style.borderColor = 'var(--text-primary)';
-            dropzone.style.background = 'rgba(255, 255, 255, 0.05)';
-        }, false);
-    });
+    // 4. File Drop & Reader (DESKTOP ONLY)
+    if (!_isMobileNow) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone?.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.style.borderColor = 'var(--text-primary)';
+                dropzone.style.background = 'rgba(255, 255, 255, 0.05)';
+            }, false);
+        });
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            dropzone.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-            dropzone.style.background = 'rgba(255, 255, 255, 0.01)';
-        }, false);
-    });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone?.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                dropzone.style.background = 'rgba(255, 255, 255, 0.01)';
+            }, false);
+        });
 
-    dropzone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        if (files && files.length > 0) {
-            handleUploadedFile(files[0]);
-        }
-    });
+        dropzone?.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files && files.length > 0) {
+                handleUploadedFile(files[0]);
+            }
+        });
 
-    dropzone.addEventListener('click', () => {
-        fileInput.click();
-    });
+        dropzone?.addEventListener('click', () => {
+            fileInput?.click();
+        });
 
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            handleUploadedFile(e.target.files[0]);
-        }
-    });
+        fileInput?.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleUploadedFile(e.target.files[0]);
+            }
+        });
+    }
 
     function handleUploadedFile(file) {
         if (!file.type.startsWith('image/')) {
@@ -1755,6 +1801,307 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3500);
     }
 
-    // Run Initializations
-    initCarousel();
+    // ═══════════════════════════════════════════════════════════
+    // MOBILE UI INITIALIZATION
+    // All mobile-specific logic is guarded by isMobile check
+    // ═══════════════════════════════════════════════════════════
+    const isMobile = document.body.classList.contains('is-mobile');
+
+    if (isMobile) {
+        initMobileGallery();
+        initMobileEnhancer();
+    } else {
+        // Run Initializations (desktop)
+        initCarousel();
+    }
+
+    // ─── Mobile Gallery (swipe cards replacing 3D carousel) ───────────────────
+    function initMobileGallery() {
+        const track = document.getElementById('mobile-gallery-track');
+        const dotsContainer = document.getElementById('mobile-gallery-dots');
+        if (!track || !dotsContainer) return;
+
+        // Build cards
+        cardsData.forEach((card, idx) => {
+            const el = document.createElement('div');
+            el.className = 'mobile-card';
+            el.dataset.index = idx;
+            el.innerHTML = `
+                <img src="${card.image}" alt="${card.title}" loading="lazy">
+                <div class="mobile-card-overlay">
+                    <div class="mobile-card-category">${card.tags[0]}</div>
+                    <div class="mobile-card-title">${card.title}</div>
+                </div>
+            `;
+            el.addEventListener('click', () => {
+                // Remove previous selected
+                track.querySelectorAll('.mobile-card').forEach(c => c.classList.remove('selected'));
+                el.classList.add('selected');
+                // Open enhancer with this card's image
+                showMobileEnhancer(card.image);
+            });
+            track.appendChild(el);
+
+            // Dot
+            const dot = document.createElement('div');
+            dot.className = 'mobile-dot' + (idx === 0 ? ' active' : '');
+            dotsContainer.appendChild(dot);
+        });
+
+        // Update active dot on scroll
+        track.addEventListener('scroll', () => {
+            const cardW = 200 + 16; // width + gap
+            const idx = Math.round(track.scrollLeft / cardW);
+            dotsContainer.querySelectorAll('.mobile-dot').forEach((d, i) => {
+                d.classList.toggle('active', i === idx);
+            });
+        }, { passive: true });
+    }
+
+    // ─── Mobile Enhancer State ─────────────────────────────────────────────────
+    function initMobileEnhancer() {
+        const enhancerSection  = document.getElementById('enhancer-section');
+        const heroSection      = document.querySelector('.hero-section');
+        const mobileDropzone   = document.getElementById('mobile-dropzone');
+        const mobileFileInput  = document.getElementById('mobile-file-input');
+        const mProcessing      = document.getElementById('mobile-processing-container');
+        const mConsoleLogs     = document.getElementById('mobile-console-logs');
+        const mSliderView      = document.getElementById('mobile-slider-view-container');
+        const mSideBySide      = document.getElementById('mobile-side-by-side-container');
+        const mSliderWrapper   = document.getElementById('mobile-slider-wrapper');
+        const mSliderHandle    = document.getElementById('mobile-slider-handle');
+        const mBeforeImg       = document.getElementById('mobile-before-img');
+        const mAfterImg        = document.getElementById('mobile-after-img');
+        const mSideBeforeImg   = document.getElementById('mobile-side-before-img');
+        const mSideAfterImg    = document.getElementById('mobile-side-after-img');
+        const mViewToggle      = document.getElementById('mobile-view-mode-toggle');
+        const mBtnSlider       = document.getElementById('mobile-btn-view-slider');
+        const mBtnSide         = document.getElementById('mobile-btn-view-side');
+        const mBtnClose        = document.getElementById('mobile-btn-close-enhancer');
+        const mBtnBack         = document.getElementById('mobile-btn-back');
+        const mBtnDownload     = document.getElementById('mobile-btn-download');
+        const mBtnAnother      = document.getElementById('mobile-btn-upscale-another');
+        const mSliderEnhance   = document.getElementById('mobile-slider-enhance');
+        const mSliderEnhanceV  = document.getElementById('mobile-slider-enhance-val');
+        const mSliderDenoise   = document.getElementById('mobile-slider-denoise');
+        const mSliderDenoiseV  = document.getElementById('mobile-slider-denoise-val');
+        const mModePills       = document.querySelectorAll('.mobile-mode-pill');
+        const mBtnTryAppMobile = document.getElementById('btn-try-app-mobile');
+
+        let mUploadedImage     = null;
+        let mProcessedImage    = null;
+        let mActiveViewMode    = 'slider';
+        let mRestorationMode   = localStorage.getItem('restoration_mode') || 'canvas';
+
+        // Sync mode pills
+        function syncModePills(mode) {
+            mRestorationMode = mode;
+            mModePills.forEach(p => p.classList.toggle('active', p.dataset.mode === mode));
+        }
+        syncModePills(mRestorationMode);
+
+        mModePills.forEach(pill => {
+            pill.addEventListener('click', () => syncModePills(pill.dataset.mode));
+        });
+
+        // Open enhancer helpers
+        function showMobileEnhancerPanel(imageSrc) {
+            heroSection.classList.add('hidden');
+            enhancerSection.classList.add('visible');
+            if (imageSrc) {
+                mUploadedImage = imageSrc;
+                mobileResetToUpload(false);
+                mobileStartPipeline(imageSrc);
+            } else {
+                mobileResetToUpload(true);
+            }
+        }
+
+        // Called by gallery card click (scoped to window)
+        window.showMobileEnhancer = showMobileEnhancerPanel;
+
+        function hideMobileEnhancerPanel() {
+            enhancerSection.classList.remove('visible');
+            heroSection.classList.remove('hidden');
+        }
+
+        mBtnClose?.addEventListener('click', hideMobileEnhancerPanel);
+        mBtnBack?.addEventListener('click', hideMobileEnhancerPanel);
+        mBtnTryAppMobile?.addEventListener('click', () => showMobileEnhancerPanel(null));
+
+        // Also hook the main "Upscale Images" button for mobile
+        document.getElementById('btn-try-app')?.addEventListener('click', () => {
+            if (isMobile) showMobileEnhancerPanel(null);
+        });
+
+        // Upload
+        mobileDropzone?.addEventListener('click', () => mobileFileInput?.click());
+        mobileFileInput?.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (file) mobileHandleFile(file);
+        });
+
+        function mobileHandleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('Invalid file. Please upload an image.');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                mUploadedImage = e.target.result;
+                mobileStartPipeline(mUploadedImage);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function mobileResetToUpload(showDropzone) {
+            if (mobileDropzone)      mobileDropzone.style.display       = showDropzone ? 'flex' : 'none';
+            if (mProcessing)         mProcessing.style.display           = 'none';
+            if (mSliderView)         mSliderView.style.display           = 'none';
+            if (mSideBySide)         mSideBySide.style.display           = 'none';
+            if (mViewToggle)         mViewToggle.style.display           = 'none';
+        }
+
+        function mobileStartPipeline(imgSrc) {
+            if (mobileDropzone)  mobileDropzone.style.display = 'none';
+            if (mProcessing)     mProcessing.style.display    = 'flex';
+            if (mSliderView)     mSliderView.style.display    = 'none';
+            if (mSideBySide)     mSideBySide.style.display    = 'none';
+            if (mConsoleLogs)    mConsoleLogs.innerHTML        = '';
+
+            const logLines = [
+                { text: 'Input image loaded.', delay: 300 },
+                { text: 'Initializing Neural Engine v4.2...', delay: 900 },
+                { text: 'Mapping texture matrices...', delay: 1600 },
+                { text: 'Enhancing details: pores, fibers...', delay: 2400 },
+                { text: 'Rendering 4K UHD output. Done.', delay: 3200 },
+            ];
+
+            logLines.forEach(l => {
+                setTimeout(() => {
+                    if (!mConsoleLogs) return;
+                    const line = document.createElement('div');
+                    line.className = 'console-line';
+                    line.textContent = `> ${l.text}`;
+                    mConsoleLogs.appendChild(line);
+                    mConsoleLogs.scrollTop = mConsoleLogs.scrollHeight;
+                }, l.delay);
+            });
+
+            setTimeout(() => {
+                mobileShowSlider(imgSrc);
+            }, 3600);
+        }
+
+        function mobileShowSlider(imgSrc) {
+            if (mProcessing)  mProcessing.style.display = 'none';
+            if (mViewToggle)  mViewToggle.style.display = 'flex';
+
+            // Set original image (blurred as "before")
+            if (mBeforeImg) {
+                mBeforeImg.src = imgSrc;
+                mBeforeImg.style.filter = 'blur(2px) saturate(0.7) brightness(0.85)';
+            }
+
+            // Process the "after" image
+            const afterBadge = mSliderWrapper?.querySelector('.after-badge');
+            processImage(imgSrc, parseInt(mSliderEnhance?.value || 85), parseInt(mSliderDenoise?.value || 90), false, (processedUrl) => {
+                mProcessedImage = processedUrl;
+                if (mAfterImg) mAfterImg.src = processedUrl;
+                if (mSideAfterImg) mSideAfterImg.src = processedUrl;
+                if (afterBadge) afterBadge.textContent = '4K Enhanced';
+            });
+
+            if (mSideBeforeImg) mSideBeforeImg.src = imgSrc;
+
+            // Show slider
+            mobileSetView('slider');
+
+            // Reset mobile slider handle position
+            mSliderWrapper?.style.setProperty('--slider-pos', '50%');
+        }
+
+        function mobileSetView(mode) {
+            mActiveViewMode = mode;
+            mBtnSlider?.classList.toggle('active', mode === 'slider');
+            mBtnSide?.classList.toggle('active', mode === 'side');
+
+            if (mSliderView)  mSliderView.style.display   = mode === 'slider' ? 'flex' : 'none';
+            if (mSideBySide)  mSideBySide.style.display   = mode === 'side'   ? 'flex' : 'none';
+        }
+
+        mBtnSlider?.addEventListener('click', () => mobileSetView('slider'));
+        mBtnSide?.addEventListener('click',   () => mobileSetView('side'));
+
+        // Mobile comparison slider drag
+        function mobileInitSlider() {
+            if (!mSliderHandle || !mSliderWrapper) return;
+            let dragging = false;
+
+            function getPos(e) {
+                const rect = mSliderWrapper.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const pct = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+                return pct + '%';
+            }
+
+            mSliderHandle.addEventListener('mousedown',  () => { dragging = true; });
+            mSliderHandle.addEventListener('touchstart', () => { dragging = true; }, { passive: true });
+
+            window.addEventListener('mousemove',  (e) => { if (dragging) mSliderWrapper.style.setProperty('--slider-pos', getPos(e)); });
+            window.addEventListener('touchmove',  (e) => { if (dragging) mSliderWrapper.style.setProperty('--slider-pos', getPos(e)); }, { passive: true });
+            window.addEventListener('mouseup',    () => { dragging = false; });
+            window.addEventListener('touchend',   () => { dragging = false; });
+        }
+        mobileInitSlider();
+
+        // Parameter sliders
+        mSliderEnhance?.addEventListener('input', (e) => {
+            if (mSliderEnhanceV) mSliderEnhanceV.textContent = e.target.value + '%';
+            if (mUploadedImage) mobileDebouncedProcess();
+        });
+
+        mSliderDenoise?.addEventListener('input', (e) => {
+            if (mSliderDenoiseV) mSliderDenoiseV.textContent = e.target.value + '%';
+            if (mUploadedImage) mobileDebouncedProcess();
+        });
+
+        let mDebounceTimer = null;
+        function mobileDebouncedProcess() {
+            if (mDebounceTimer) clearTimeout(mDebounceTimer);
+            mDebounceTimer = setTimeout(() => {
+                if (!mUploadedImage) return;
+                processImage(mUploadedImage, parseInt(mSliderEnhance?.value || 85), parseInt(mSliderDenoise?.value || 90), false, (url) => {
+                    mProcessedImage = url;
+                    if (mAfterImg) mAfterImg.src = url;
+                    if (mSideAfterImg) mSideAfterImg.src = url;
+                });
+            }, 200);
+        }
+
+        // Download
+        mBtnDownload?.addEventListener('click', () => {
+            if (!mUploadedImage) { showToast('Please upload an image first.'); return; }
+            showToast('Preparing 4K UHD download...');
+            const src = mProcessedImage || mUploadedImage;
+            processImage(src, parseInt(mSliderEnhance?.value || 85), parseInt(mSliderDenoise?.value || 90), true, (downloadUrl) => {
+                const link = document.createElement('a');
+                link.download = 'enhanced-4k.jpg';
+                link.href = downloadUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('4K image saved!');
+            });
+        });
+
+        // Upscale another
+        mBtnAnother?.addEventListener('click', () => {
+            mUploadedImage   = null;
+            mProcessedImage  = null;
+            if (mBeforeImg)  mBeforeImg.style.filter = '';
+            mobileResetToUpload(true);
+        });
+    }
+
 });
